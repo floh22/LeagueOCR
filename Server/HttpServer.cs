@@ -1,4 +1,5 @@
-﻿using Microsoft.Owin.Hosting;
+﻿using Common;
+using Microsoft.Owin.Hosting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,13 +8,15 @@ using System.Threading.Tasks;
 
 namespace Server
 {
-    class HttpServer
+    public class HttpServer
     {
 
         public int port;
         public string uri;
 
         private IDisposable _webApp;
+
+        public static AOIList AOIList;
 
         public HttpServer(int port)
         {

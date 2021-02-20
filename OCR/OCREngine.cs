@@ -7,17 +7,21 @@ namespace OCR
     public class OCREngine
     {
 
-        private static TesseractEngine _engine;
-        public static void Debug()
-        {
+        private TesseractEngine _engine;
 
+        public OCREngine()
+        {
             _engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default, @"./tessdata/configs.txt");
+        }
+
+        public void Debug()
+        {
             var testImagePath = "./GoldRed.png";
 
             var img = Pix.LoadFromFile(testImagePath);
 
 
-            var text = GetTextInSubregion(img, new Rect(0, 0, img.Width, img.Height));
+            var text = GetTextInImage(img, new Rect(0, 0, img.Width, img.Height));
 
             Console.WriteLine("Text (GetText): \r\n{0}", text);
 
@@ -28,7 +32,7 @@ namespace OCR
         }
 
 
-        public static string GetTextInSubregion(Pix image, Rect subRegion)
+        public string GetTextInImage(Pix image, Rect subRegion)
         {
             try
             {
@@ -45,6 +49,24 @@ namespace OCR
                 return "";
             }
 
+        }
+
+        public string GetTextInSubregion(System.Drawing.Bitmap bitmap, System.Drawing.Rectangle subRegion)
+        {
+            try
+            {
+                string unfilteredOut = _engine.Process(bitmap, new Rect(subRegion.X, subRegion.Y, subRegion.Width, subRegion.Height)).GetText();
+                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "");
+                return cleaned;
+            }
+            catch (Exception e)
+            {
+                Trace.TraceError(e.ToString());
+                Console.WriteLine("Unexpected Error: " + e.Message);
+                Console.WriteLine("Details: ");
+                Console.WriteLine(e.ToString());
+                return "";
+            }
         }
     }
 }

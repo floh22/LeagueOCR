@@ -22,6 +22,7 @@
 //  THE SOFTWARE.
 //  ---------------------------------------------------------------------------------
 
+using Common;
 using Composition.WindowsRuntimeHelpers;
 using System;
 using System.Collections.Generic;
@@ -54,6 +55,7 @@ namespace CaptureSampleCore
         public bool CapturingLoL = false;
 
         public EventHandler<Size> ContentSizeUpdated;
+        public EventHandler CaptureWindowClosed;
 
         public BasicSampleApplication(Compositor c, Size size)
         {
@@ -107,6 +109,22 @@ namespace CaptureSampleCore
         {
             aoiList.Blue_Gold = new AreaOfInterest(760, 15, 90, 25);
             aoiList.Red_Gold = new AreaOfInterest(1145, 15, 90, 25);
+
+
+            aoiList.GetAllAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
+        }
+
+        private SpriteVisual CreateSprite(AreaOfInterest aoi)
+        {
+            SpriteVisual s = BasicSampleApplication.compositor.CreateSpriteVisual();
+            s.AnchorPoint = new Vector2(0f);
+            s.Size = new Vector2(aoi.Rect.Width, aoi.Rect.Height);
+            s.Offset = new Vector3(aoi.Rect.X, aoi.Rect.Y, 0);
+            s.Brush = BasicSampleApplication.aoiBrush;
+
+            BasicSampleApplication.content.Children.InsertAtBottom(s);
+
+            return s;
         }
 
 
@@ -163,6 +181,12 @@ namespace CaptureSampleCore
             ContentSizeUpdated?.Invoke(this, e);
         }
 
+        public virtual void OnCaptureWindowClose(GraphicsCaptureItem i, object o)
+        {
+            CaptureWindowClosed?.Invoke(this, EventArgs.Empty);
+        }
+
+
         public Visual Visual => root;
 
         public void Dispose()
@@ -203,7 +227,12 @@ namespace CaptureSampleCore
 
         public Bitmap GetCurrentBitmap()
         {
+            if (capture.GetCurrentFrameAsBitmap(out var result))
+            {
+                return result;
+            }
 
+            return null;
         }
     }
 }

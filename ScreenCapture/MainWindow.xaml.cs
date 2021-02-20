@@ -51,15 +51,18 @@ namespace LoLOCRHub
         private CompositionTarget target;
         private ContainerVisual root;
 
-        DispatcherTimer findLoLTimer, isCapturingTimer;
+        DispatcherTimer findLoLTimer, isCapturingTimer, OCREngineTimer;
 
         private BasicSampleApplication sample;
         private ObservableCollection<Process> processes;
         private Process currentProcess = null;
 
         private OCREngine OCREngine;
+        private Server.HttpServer HttpServer;
 
         private System.Drawing.Size actualSize;
+        private double dpiX = 1.0;
+        private double dpiY = 1.0;
 
         private bool finishedInit = false;
 
@@ -68,7 +71,7 @@ namespace LoLOCRHub
             InitializeComponent();
             findLoLTimer = new DispatcherTimer()
             {
-                Interval = TimeSpan.FromSeconds(1)
+                Interval = TimeSpan.FromSeconds(5)
             };
             findLoLTimer.Tick += FindLoLProcess;
             findLoLTimer.Start();
@@ -78,6 +81,12 @@ namespace LoLOCRHub
                 Interval = TimeSpan.FromSeconds(1)
             };
             isCapturingTimer.Tick += CurrentlyCapturing;
+
+            OCREngineTimer = new DispatcherTimer()
+            {
+                Interval = TimeSpan.FromSeconds(5)
+            };
+            OCREngineTimer.Tick += FindValuesInLoL;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -86,8 +95,6 @@ namespace LoLOCRHub
             hwnd = interopWindow.Handle;
 
             var presentationSource = PresentationSource.FromVisual(this);
-            double dpiX = 1.0;
-            double dpiY = 1.0;
             if (presentationSource != null)
             {
                 dpiX = presentationSource.CompositionTarget.TransformToDevice.M11;
@@ -99,6 +106,7 @@ namespace LoLOCRHub
             actualSize = new System.Drawing.Size((int)Main.ActualWidth - 200, (int)Main.ActualHeight);
 
             InitComposition(controlsWidth);
+            InitCaptureComponent();
             InitWindowList();
         }
 
@@ -178,21 +186,27 @@ namespace LoLOCRHub
             target.Root = root;
 
 
+        }
+
+        private void InitCaptureComponent()
+        {
             // Setup the rest of the sample application.
             sample = new BasicSampleApplication(compositor, actualSize);
             sample.ContentSizeUpdated += UpdateWindowSize;
             root.Children.InsertAtTop(sample.Visual);
+            sample.CaptureWindowClosed += ResetWindowSize;
 
+            OCREngine = new OCREngine();
         }
 
         private void UpdateWindowSize(object sender, System.Drawing.Size e)
         {
             e = new System.Drawing.Size((int)(e.Width * sample.RenderScale), (int)(e.Height * sample.RenderScale));
             //Main.ResizeMode = ResizeMode.CanResize;
-            Main.MaxWidth = e.Width + 216;
-            Main.MinWidth = e.Width + 216;
-            Main.MaxHeight = e.Height + 39;
-            Main.MinHeight = e.Height + 39;
+            Main.MaxWidth = (e.Width + 216) * dpiX;
+            Main.MinWidth = (e.Width + 216) * dpiX;
+            Main.MaxHeight = (e.Height + 39) * dpiY;
+            Main.MinHeight = (e.Height + 39) * dpiY;
             //Main.ResizeMode = ResizeMode.CanMinimize;
         }
 
@@ -220,11 +234,15 @@ namespace LoLOCRHub
                 sample.StartCaptureFromItem(item);
 
                 if (pName.Equals("League of Legends (TM) Client")) {
+                    //Capturing League. Start OCR and Data Server
                     sample.CapturingLeagueOfLegends();
+                    OCREngineTimer.Start();
+                    HttpServer.StartServer();
                 }
             }
 
-            isCapturingTimer.Start();
+            //Move to event based system to detect stop
+            //isCapturingTimer.Start();
             findLoLTimer.Stop();
             finishedInit = true;
         }
@@ -232,6 +250,13 @@ namespace LoLOCRHub
         private void StopCapture()
         {
             currentProcess = null;
+
+            if (sample.CapturingLoL)
+            {
+                //Was capturing league. Stop OCR and Data Server
+                OCREngineTimer.Stop();
+                HttpServer.StopServer();
+            }
             sample.StopCapture();
             if (!findLoLTimer.IsEnabled)
                 findLoLTimer.Start();
@@ -252,6 +277,37 @@ namespace LoLOCRHub
                 StartHwndCapture(first.MainWindowHandle, first.MainWindowTitle);
                 currentProcess = first;
             }
+        }
+
+        private void ShowPreviewButton_Checked(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ShowPreviewButton_Unchecked(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ResetWindowSize(object sender, EventArgs e)
+        {
+            //Update Window
+            Main.MaxWidth = 800;
+            Main.MinWidth = 800;
+            Main.MaxHeight = 450;
+            Main.MinHeight = 450;
+
+            StopCapture();
+        }
+
+        private void FindValuesInLoL(object sender, EventArgs e)
+        {
+            Common.AOIList aoiList = sample.GetAreasOfInterest();
+            var currentFrame = sample.GetCurrentBitmap();
+            aoiList.GetAllAreaOfInterests().ForEach((aoi) =>
+            {
+                aoi.CurrentContent = OCREngine.GetTextInSubregion(currentFrame, aoi.Rect);
+            });
         }
 
         private void CurrentlyCapturing(object sender, EventArgs e)

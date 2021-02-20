@@ -42,7 +42,24 @@ namespace Server.Controllers
 
         private void UpdateTeams()
         {
+            blueTeam.Gold = GoldToInt(HttpServer.AOIList.Blue_Gold.CurrentContent, blueTeam.Gold);
+            redTeam.Gold = GoldToInt(HttpServer.AOIList.Red_Gold.CurrentContent, redTeam.Gold);
+        }
 
+        private int GoldToInt(string goldValue, int backup)
+        {
+            //Have backup value incase OCR goes wrong somehow and the int cant be parsed. In that case fall back to the last value
+            //This should keep the gold value from fluctuating or displaying something completely incorrect
+            //Maybe do this step in OCR directly?
+            try
+            {
+                var parse = Int32.Parse(goldValue.Replace("k", ""));
+                return parse;
+            }
+            catch (Exception)
+            {
+                return backup;
+            }
         }
     }
 }

@@ -117,6 +117,10 @@
       <Project>{502b19a1-292a-4e7f-9c19-b16ca42f1f82}</Project>
       <Name>CaptureSampleCore</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Common\Common.csproj">
+      <Project>{A4E0CC4F-24AF-44E2-8E11-679E19CFC682}</Project>
+      <Name>Common</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Composition.WindowsRuntimeHelpers\Composition.WindowsRuntimeHelpers.csproj">
       <Project>{ec969287-3d35-410a-806c-0baaa7564911}</Project>
       <Name>Composition.WindowsRuntimeHelpers</Name>
