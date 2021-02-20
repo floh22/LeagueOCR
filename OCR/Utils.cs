@@ -24,11 +24,6 @@ namespace OCR
             return bitmap;
         }
 
-        public static Bitmap GetSubRegion(Bitmap inputMap, Rectangle subRegion, Bitmap outputMap)
-        {
-            return null;
-        }
-
         public static unsafe void ApplyContrast(double contrast, Bitmap bmp)
         {
             byte[] contrast_lookup = new byte[256];
