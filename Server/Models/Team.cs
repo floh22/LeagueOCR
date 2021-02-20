@@ -8,9 +8,9 @@ namespace Server.Models
 {
     public class Team
     {
-        public int Id { get; set; }
-        public string TeamName { get; set; }
-        public int Gold{ get; set; }
+        public int Id;
+        public string TeamName;
+        public int Gold;
 
         public Team(int Id, string TeamName, int Gold)
         {

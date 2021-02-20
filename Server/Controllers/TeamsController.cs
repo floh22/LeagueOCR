@@ -9,8 +9,8 @@ namespace Server.Controllers
 {
     public class TeamsController: ApiController
     {
-        Team blueTeam = new Team();
-        Team redTeam = new Team();
+        public Team blueTeam;
+        public Team redTeam;
 
         public IEnumerable<Team> GetAllTeams()
         {
@@ -42,8 +42,15 @@ namespace Server.Controllers
 
         private void UpdateTeams()
         {
-            blueTeam.Gold = GoldToInt(HttpServer.AOIList.Blue_Gold.CurrentContent, blueTeam.Gold);
-            redTeam.Gold = GoldToInt(HttpServer.AOIList.Red_Gold.CurrentContent, redTeam.Gold);
+            if (blueTeam == null)
+                blueTeam = new Team(0, "ORDER", 3200);
+            if (redTeam == null)
+                redTeam = new Team(1, "CHAOS", 3200);
+            string blueGoldText = HttpServer.AOIList.Blue_Gold.CurrentContent;
+            string redGoldText = HttpServer.AOIList.Red_Gold.CurrentContent;
+            Console.WriteLine(blueGoldText + ", " + redGoldText);
+            blueTeam.Gold = GoldToInt(blueGoldText, blueTeam.Gold);
+            redTeam.Gold = GoldToInt(redGoldText, redTeam.Gold);
         }
 
         private int GoldToInt(string goldValue, int backup)
@@ -53,7 +60,12 @@ namespace Server.Controllers
             //Maybe do this step in OCR directly?
             try
             {
-                var parse = Int32.Parse(goldValue.Replace("k", ""));
+                var parse = Int32.Parse(goldValue.Replace("k", "").Replace(".", "")) * 100;
+
+                //Currently OCR is a bit moody and will often spit out straight nonsense. Try to avoid actually showing this by making sure that the numbers are somewhat logical
+                //This breaks the ability to scroll through replays. Once OCR is a bit more stable, remove this!
+                if (parse < backup)
+                    return backup;
                 return parse;
             }
             catch (Exception)

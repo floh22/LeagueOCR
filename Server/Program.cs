@@ -14,8 +14,10 @@ namespace Server
 
         static void Main(string[] args)
         {
+            /*
             HttpServer = new HttpServer(3002);
             HttpServer.StartServer();
+            */
         }
     }
 }

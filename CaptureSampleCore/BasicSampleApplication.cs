@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using System.Threading.Tasks;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.UI;
@@ -56,6 +57,8 @@ namespace CaptureSampleCore
 
         public EventHandler<Size> ContentSizeUpdated;
         public EventHandler CaptureWindowClosed;
+
+        public EventHandler<Bitmap> BitmapCreated;
 
         public BasicSampleApplication(Compositor c, Size size)
         {
@@ -225,14 +228,9 @@ namespace CaptureSampleCore
             return aoiList;
         }
 
-        public Bitmap GetCurrentBitmap()
+        public void RequestCurrentBitmap()
         {
-            if (capture.GetCurrentFrameAsBitmap(out var result))
-            {
-                return result;
-            }
-
-            return null;
+            capture.RequestBitmap = true;
         }
     }
 }

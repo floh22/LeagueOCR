@@ -49,9 +49,8 @@ namespace CaptureSampleCore
         private SharpDX.Direct3D11.Device d3dDevice;
         private SharpDX.DXGI.SwapChain1 swapChain;
 
-        private SharpDX.Direct3D11.Texture2D currentFrame;
-
         private bool newWindow = true;
+        public bool RequestBitmap = false;
 
         public BasicCapture(IDirect3DDevice d, GraphicsCaptureItem i, BasicSampleApplication a)
         {
@@ -139,7 +138,13 @@ namespace CaptureSampleCore
                 using (var bitmap = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface))
                 {
                     d3dDevice.ImmediateContext.CopyResource(bitmap, backBuffer);
-                    currentFrame = bitmap;
+                    if(RequestBitmap)
+                    {
+                        RequestBitmap = false;
+                        var tempBitmap = new System.Drawing.Bitmap(bitmap.Description.Width, bitmap.Description.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                        BitmapFromTexture(tempBitmap, bitmap);
+                        appWindow.BitmapCreated(this, tempBitmap);
+                    }
                 }
 
 
@@ -192,6 +197,7 @@ namespace CaptureSampleCore
                 {
                     d3dDevice.ImmediateContext.UnmapSubresource(stage, 0);
                 }
+                fastBitmap.UnlockBits(bmpData);
                 dsIn.Dispose();
             }
             return true;
@@ -220,12 +226,6 @@ namespace CaptureSampleCore
             };
 
             return new Texture2D(d3dDevice, textureDesc);
-        }
-
-        public bool GetCurrentFrameAsBitmap(out Bitmap outMap)
-        {
-            outMap = new System.Drawing.Bitmap(currentFrame.Description.Width, currentFrame.Description.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            return BitmapFromTexture(outMap, currentFrame);
         }
 
     }

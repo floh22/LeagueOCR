@@ -31,7 +31,8 @@
         xmlns:local="clr-namespace:LoLOCRHub"
         mc:Ignorable="d"
         Title="LeagueOCR" MinHeight="450" MinWidth="800" SizeToContent="WidthAndHeight" WindowStartupLocation="CenterScreen" ResizeMode="CanMinimize"
-        Loaded="Window_Loaded">
+        Loaded="Window_Loaded"
+        Closing="Window_Closing" >
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="200" />
@@ -52,7 +53,6 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <ToggleButton x:Name="RunServerButton" Content="Run Websocket Server" Checked="RunServerButton_Checked" Unchecked="RunServerButton_Unchecked" Margin="10" />
                 <ToggleButton x:Name="ESportsTimerButton" Content="Use eSports Timer" Checked="ESportsTimerButton_Checked" Unchecked="ESportsTimerButton_Unchecked" Margin="10" />
                 <TextBlock Text="Window Scale" Margin="0,25,0,-10" HorizontalAlignment="Center"/>
                 <Slider x:Name="ScaleSlider" Minimum="0.2" Maximum="1" TickFrequency="0.1" TickPlacement="BottomRight" ValueChanged="ScaleChanged" Value="0.5" Margin="10"/>

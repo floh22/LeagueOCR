@@ -11,7 +11,7 @@ using System.Web.Http;
 
 namespace Server
 {
-    class Startup
+    public partial class Startup
     {
         public void Configuration(IAppBuilder appBuilder)
         {

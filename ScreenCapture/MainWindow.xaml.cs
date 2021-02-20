@@ -24,10 +24,15 @@
 
 using CaptureSampleCore;
 using Composition.WindowsRuntimeHelpers;
+using Microsoft.Owin;
 using OCR;
+using Server;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -38,6 +43,8 @@ using System.Windows.Threading;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Capture;
 using Windows.UI.Composition;
+
+[assembly: OwinStartup(typeof(Startup))]
 
 namespace LoLOCRHub
 {
@@ -51,13 +58,13 @@ namespace LoLOCRHub
         private CompositionTarget target;
         private ContainerVisual root;
 
-        DispatcherTimer findLoLTimer, isCapturingTimer, OCREngineTimer;
+        DispatcherTimer findLoLTimer, OCREngineTimer;
 
         private BasicSampleApplication sample;
         private ObservableCollection<Process> processes;
         private Process currentProcess = null;
 
-        private OCREngine OCREngine;
+        private List<Task> OCRTasks;
         private Server.HttpServer HttpServer;
 
         private System.Drawing.Size actualSize;
@@ -65,29 +72,14 @@ namespace LoLOCRHub
         private double dpiY = 1.0;
 
         private bool finishedInit = false;
-
         public MainWindow()
         {
             InitializeComponent();
-            findLoLTimer = new DispatcherTimer()
-            {
-                Interval = TimeSpan.FromSeconds(5)
-            };
-            findLoLTimer.Tick += FindLoLProcess;
-            findLoLTimer.Start();
-
-            isCapturingTimer = new DispatcherTimer()
-            {
-                Interval = TimeSpan.FromSeconds(1)
-            };
-            isCapturingTimer.Tick += CurrentlyCapturing;
-
-            OCREngineTimer = new DispatcherTimer()
-            {
-                Interval = TimeSpan.FromSeconds(5)
-            };
-            OCREngineTimer.Tick += FindValuesInLoL;
+            StartTimers();
+            OCRTasks = new List<Task>();
         }
+
+        //Window Functions
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -110,20 +102,204 @@ namespace LoLOCRHub
             InitWindowList();
         }
 
+        void Window_Closing(object sender, CancelEventArgs e)
+        {
+            if (sample.CapturingLoL)
+            {
+                string msg = "LoL currently running. Stop game analysis?";
+                MessageBoxResult result =
+                  MessageBox.Show(
+                    msg,
+                    "LeagueOCR",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (result == MessageBoxResult.No)
+                {
+                    // If user doesn't want to close, cancel closure
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
+            OCRTasks.ForEach((t) => { if (t.IsCompleted) t.Dispose(); });
+        }
+
+        private void ScaleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!finishedInit)
+                return;
+            if (sender is Slider slider)
+            {
+                sample.UpdateScale((float)slider.Value);
+            }
+        }
+
+        private void UpdateWindowSize(object sender, System.Drawing.Size e)
+        {
+            e = new System.Drawing.Size((int)(e.Width * sample.RenderScale), (int)(e.Height * sample.RenderScale));
+            Main.MaxWidth = (e.Width + 216) * dpiX;
+            Main.MinWidth = (e.Width + 216) * dpiX;
+            Main.MaxHeight = (e.Height + 39) * dpiY;
+            Main.MinHeight = (e.Height + 39) * dpiY;
+        }
+
+        private void ResetWindowSize(object sender, EventArgs e)
+        {
+            //Update Window
+            Main.MaxWidth = 800;
+            Main.MinWidth = 800;
+            Main.MaxHeight = 450;
+            Main.MinHeight = 450;
+
+            StopCapture();
+        }
+
+        private void InitWindowList()
+        {
+            if (ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
+            {
+                var processesWithWindows = from p in Process.GetProcesses()
+                                           where !string.IsNullOrWhiteSpace(p.MainWindowTitle) && WindowEnumerationHelper.IsWindowValidForCapture(p.MainWindowHandle)
+                                           select p;
+                processes = new ObservableCollection<Process>(processesWithWindows);
+                WindowComboBox.ItemsSource = processes;
+            }
+            else
+            {
+                WindowComboBox.IsEnabled = false;
+            }
+        }
+
+        private void InitComposition(float controlsWidth)
+        {
+            // Create the compositor.
+            compositor = new Compositor();
+
+            // Create a target for the window.
+            target = compositor.CreateDesktopWindowTarget(hwnd, true);
+
+            // Attach the root visual.
+            root = compositor.CreateContainerVisual();
+            root.RelativeSizeAdjustment = Vector2.One;
+            root.Size = new Vector2(-controlsWidth, 0);
+            root.Offset = new Vector3(controlsWidth, 0, 0);
+            target.Root = root;
+
+
+        }
+
+        //Window Capture Functions
+
+        private void InitCaptureComponent()
+        {
+            // Setup the rest of the sample application.
+            sample = new BasicSampleApplication(compositor, actualSize);
+            sample.ContentSizeUpdated += UpdateWindowSize;
+            root.Children.InsertAtTop(sample.Visual);
+            sample.CaptureWindowClosed += ResetWindowSize;
+
+            HttpServer = new HttpServer(3002);
+
+            sample.BitmapCreated += FindValuesInLoL;
+
+            FindLoLProcess(this, EventArgs.Empty);
+        }
+
+        private void StartHwndCapture(IntPtr hwnd, string pName)
+        {
+            GraphicsCaptureItem item = CaptureHelper.CreateItemForWindow(hwnd);
+            if (item != null)
+            {
+                sample.StartCaptureFromItem(item);
+
+                if (pName.Equals("League of Legends (TM) Client")) {
+                    //Capturing League. Start OCR and Data Server
+                    sample.CapturingLeagueOfLegends();
+
+                    //Starting doing OCR on the scene since we now know where to look for what
+                    OCREngineTimer.Start();
+
+                    //Start data server
+                    HttpServer.AOIList = sample.GetAreasOfInterest();
+                    HttpServer.StartServer();
+                }
+            }
+
+            findLoLTimer.Stop();
+            finishedInit = true;
+        }
+
+        private void StopCapture()
+        {
+            currentProcess = null;
+
+            if (sample.CapturingLoL)
+            {
+                //Was capturing league. Stop OCR and Data Server
+                OCREngineTimer.Stop();
+                HttpServer.StopServer();
+                sample.CapturingLoL = false;
+            }
+            sample.StopCapture();
+            if (!findLoLTimer.IsEnabled)
+                findLoLTimer.Start();
+        }
+
+        private void FindLoLProcess(object sender, EventArgs e)
+        {
+            if (!ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
+                return;
+            var processesWithWindows = new ObservableCollection<Process>(from p in Process.GetProcesses()
+                                                                         where !string.IsNullOrWhiteSpace(p.MainWindowTitle) && WindowEnumerationHelper.IsWindowValidForCapture(p.MainWindowHandle)
+                                                                         where p.MainWindowTitle == "League of Legends (TM) Client"
+                                                                         select p);
+            if (processesWithWindows.Count > 0)
+            {
+                sample.StopCapture();
+                Process first = processesWithWindows.First();
+                StartHwndCapture(first.MainWindowHandle, first.MainWindowTitle);
+                currentProcess = first;
+            }
+        }
+
+        private void FindValuesInLoL(object sender, Bitmap bitmap)
+        {
+
+            OCRTasks.ForEach((t) => { if (t.IsCompleted) t.Dispose(); });
+            OCRTasks.Add(Task.Factory.StartNew(() =>
+            {
+                HttpServer.AOIList = sample.GetAreasOfInterest();
+                HttpServer.AOIList.GetAllAreaOfInterests().ForEach((aoi) =>
+                {
+                    var engine = new OCREngine();
+                    aoi.CurrentContent = engine.GetTextInSubregion(bitmap, aoi.Rect);
+                });
+            }));
+
+
+        }
+
+        private void RequestUpdatedBitmap(object sender, EventArgs e)
+        {
+            sample.RequestCurrentBitmap();
+        }
+
+        //UI Elements
+
+        private void ShowPreviewButton_Checked(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ShowPreviewButton_Unchecked(object sender, RoutedEventArgs e)
+        {
+
+        }
+
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
             StopCapture();
             WindowComboBox.SelectedIndex = -1;
-        }
-
-        private void RunServerButton_Checked(object sender, RoutedEventArgs e)
-        {
-            //TODO Start all servers
-        }
-
-        private void RunServerButton_Unchecked(object sender, RoutedEventArgs e)
-        {
-            //TODO Start all servers
         }
 
         private void ESportsTimerButton_Checked(object sender, RoutedEventArgs e)
@@ -159,182 +335,21 @@ namespace LoLOCRHub
             }
         }
 
-        private void ScaleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        //Timer Init
+        private void StartTimers()
         {
-            if (!finishedInit)
-                return;
-            if (sender is Slider slider)
+            findLoLTimer = new DispatcherTimer()
             {
-                sample.UpdateScale((float)slider.Value);
-            }
-        }
+                Interval = TimeSpan.FromSeconds(5)
+            };
+            findLoLTimer.Tick += FindLoLProcess;
+            findLoLTimer.Start();
 
-
-        private void InitComposition(float controlsWidth)
-        {
-            // Create the compositor.
-            compositor = new Compositor();
-
-            // Create a target for the window.
-            target = compositor.CreateDesktopWindowTarget(hwnd, true);
-
-            // Attach the root visual.
-            root = compositor.CreateContainerVisual();
-            root.RelativeSizeAdjustment = Vector2.One;
-            root.Size = new Vector2(-controlsWidth, 0);
-            root.Offset = new Vector3(controlsWidth, 0, 0);
-            target.Root = root;
-
-
-        }
-
-        private void InitCaptureComponent()
-        {
-            // Setup the rest of the sample application.
-            sample = new BasicSampleApplication(compositor, actualSize);
-            sample.ContentSizeUpdated += UpdateWindowSize;
-            root.Children.InsertAtTop(sample.Visual);
-            sample.CaptureWindowClosed += ResetWindowSize;
-
-            OCREngine = new OCREngine();
-        }
-
-        private void UpdateWindowSize(object sender, System.Drawing.Size e)
-        {
-            e = new System.Drawing.Size((int)(e.Width * sample.RenderScale), (int)(e.Height * sample.RenderScale));
-            //Main.ResizeMode = ResizeMode.CanResize;
-            Main.MaxWidth = (e.Width + 216) * dpiX;
-            Main.MinWidth = (e.Width + 216) * dpiX;
-            Main.MaxHeight = (e.Height + 39) * dpiY;
-            Main.MinHeight = (e.Height + 39) * dpiY;
-            //Main.ResizeMode = ResizeMode.CanMinimize;
-        }
-
-        private void InitWindowList()
-        {
-            if (ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
+            OCREngineTimer = new DispatcherTimer()
             {
-                var processesWithWindows = from p in Process.GetProcesses()
-                                           where !string.IsNullOrWhiteSpace(p.MainWindowTitle) && WindowEnumerationHelper.IsWindowValidForCapture(p.MainWindowHandle)
-                                           select p;
-                processes = new ObservableCollection<Process>(processesWithWindows);
-                WindowComboBox.ItemsSource = processes;
-            }
-            else
-            {
-                WindowComboBox.IsEnabled = false;
-            }
-        }
-
-        private void StartHwndCapture(IntPtr hwnd, string pName)
-        {
-            GraphicsCaptureItem item = CaptureHelper.CreateItemForWindow(hwnd);
-            if (item != null)
-            {
-                sample.StartCaptureFromItem(item);
-
-                if (pName.Equals("League of Legends (TM) Client")) {
-                    //Capturing League. Start OCR and Data Server
-                    sample.CapturingLeagueOfLegends();
-                    OCREngineTimer.Start();
-                    HttpServer.StartServer();
-                }
-            }
-
-            //Move to event based system to detect stop
-            //isCapturingTimer.Start();
-            findLoLTimer.Stop();
-            finishedInit = true;
-        }
-
-        private void StopCapture()
-        {
-            currentProcess = null;
-
-            if (sample.CapturingLoL)
-            {
-                //Was capturing league. Stop OCR and Data Server
-                OCREngineTimer.Stop();
-                HttpServer.StopServer();
-            }
-            sample.StopCapture();
-            if (!findLoLTimer.IsEnabled)
-                findLoLTimer.Start();
-        }
-
-        private void FindLoLProcess(object sender, EventArgs e)
-        {
-            if (!ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
-                return;
-            var processesWithWindows = new ObservableCollection<Process>(from p in Process.GetProcesses()
-                                                                         where !string.IsNullOrWhiteSpace(p.MainWindowTitle) && WindowEnumerationHelper.IsWindowValidForCapture(p.MainWindowHandle)
-                                                                         where p.MainWindowTitle == "League of Legends (TM) Client"
-                                                                         select p);
-            if (processesWithWindows.Count > 0)
-            {
-                sample.StopCapture();
-                Process first = processesWithWindows.First();
-                StartHwndCapture(first.MainWindowHandle, first.MainWindowTitle);
-                currentProcess = first;
-            }
-        }
-
-        private void ShowPreviewButton_Checked(object sender, RoutedEventArgs e)
-        {
-
-        }
-
-        private void ShowPreviewButton_Unchecked(object sender, RoutedEventArgs e)
-        {
-
-        }
-
-        private void ResetWindowSize(object sender, EventArgs e)
-        {
-            //Update Window
-            Main.MaxWidth = 800;
-            Main.MinWidth = 800;
-            Main.MaxHeight = 450;
-            Main.MinHeight = 450;
-
-            StopCapture();
-        }
-
-        private void FindValuesInLoL(object sender, EventArgs e)
-        {
-            Common.AOIList aoiList = sample.GetAreasOfInterest();
-            var currentFrame = sample.GetCurrentBitmap();
-            aoiList.GetAllAreaOfInterests().ForEach((aoi) =>
-            {
-                aoi.CurrentContent = OCREngine.GetTextInSubregion(currentFrame, aoi.Rect);
-            });
-        }
-
-        private void CurrentlyCapturing(object sender, EventArgs e)
-        {
-            if (currentProcess == null)
-                return;
-            else
-            {
-                try
-                {
-                    Process.GetProcessById(currentProcess.Id);
-                }
-                catch (ArgumentException)
-                {
-                    //Not Running anymore!
-
-                    //Update Window
-                    Main.MaxWidth = 800;
-                    Main.MinWidth = 800;
-                    Main.MaxHeight = 450;
-                    Main.MinHeight = 450;
-
-                    //Stop the Capture component
-                    StopCapture();
-                    isCapturingTimer.Stop();
-                }
-            }
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            OCREngineTimer.Tick += RequestUpdatedBitmap;
         }
     }
 }
