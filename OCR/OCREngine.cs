@@ -11,7 +11,10 @@ namespace OCR
 
         public OCREngine()
         {
-            _engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default, @"./tessdata/configs.txt");
+            //_engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default, @"./tessdata/configs.txt");
+            _engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.LstmOnly);
+            _engine.SetVariable("tessedit_char_whitelist", "01234567890OlI.,ko");
+            //_engine.SetVariable("tessedit_do_invert", "0");
         }
 
         public void Debug()
@@ -55,8 +58,28 @@ namespace OCR
         {
             try
             {
+                _engine.DefaultPageSegMode = PageSegMode.SingleLine;
                 string unfilteredOut = _engine.Process(bitmap, new Rect(subRegion.X, subRegion.Y, subRegion.Width, subRegion.Height)).GetText();
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "");
+                return cleaned;
+            }
+            catch (Exception e)
+            {
+                Trace.TraceError(e.ToString());
+                Console.WriteLine("Unexpected Error: " + e.Message);
+                Console.WriteLine("Details: ");
+                Console.WriteLine(e.ToString());
+                return "";
+            }
+        }
+
+        public string GetTextInBitmap(System.Drawing.Bitmap bitmap)
+        {
+            try
+            {
+                _engine.DefaultPageSegMode = PageSegMode.SingleBlock;
+                string unfilteredOut = _engine.Process(bitmap).GetText();
+                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(",", ".");
                 return cleaned;
             }
             catch (Exception e)

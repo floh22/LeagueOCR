@@ -25,6 +25,7 @@
 using CaptureSampleCore;
 using Composition.WindowsRuntimeHelpers;
 using Microsoft.Owin;
+using Microsoft.Win32;
 using OCR;
 using Server;
 using System;
@@ -33,11 +34,15 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Linq;
 using System.Numerics;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Windows.Foundation.Metadata;
@@ -58,13 +63,11 @@ namespace LoLOCRHub
         private CompositionTarget target;
         private ContainerVisual root;
 
-        DispatcherTimer findLoLTimer, OCREngineTimer;
+        DispatcherTimer findLoLTimer;
+        System.Timers.Timer OCRTimer;
 
-        private BasicSampleApplication sample;
-        private ObservableCollection<Process> processes;
-        private Process currentProcess = null;
+        public static BasicSampleApplication sample;
 
-        private List<Task> OCRTasks;
         private Server.HttpServer HttpServer;
 
         private System.Drawing.Size actualSize;
@@ -72,11 +75,16 @@ namespace LoLOCRHub
         private double dpiY = 1.0;
 
         private bool finishedInit = false;
+        public static bool saveNextFrame = false;
+        public static bool showPreview = true;
+        public static string saveName;
+
+        public static int counter = 0;
+
         public MainWindow()
         {
             InitializeComponent();
             StartTimers();
-            OCRTasks = new List<Task>();
         }
 
         //Window Functions
@@ -99,7 +107,6 @@ namespace LoLOCRHub
 
             InitComposition(controlsWidth);
             InitCaptureComponent();
-            InitWindowList();
         }
 
         void Window_Closing(object sender, CancelEventArgs e)
@@ -120,8 +127,6 @@ namespace LoLOCRHub
                     return;
                 }
             }
-
-            OCRTasks.ForEach((t) => { if (t.IsCompleted) t.Dispose(); });
         }
 
         private void ScaleChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -134,13 +139,20 @@ namespace LoLOCRHub
             }
         }
 
-        private void UpdateWindowSize(object sender, System.Drawing.Size e)
+        private void UpdateWindowSize(System.Drawing.Size e)
         {
+            if (!showPreview)
+                return;
             e = new System.Drawing.Size((int)(e.Width * sample.RenderScale), (int)(e.Height * sample.RenderScale));
             Main.MaxWidth = (e.Width + 216) * dpiX;
             Main.MinWidth = (e.Width + 216) * dpiX;
             Main.MaxHeight = (e.Height + 39) * dpiY;
             Main.MinHeight = (e.Height + 39) * dpiY;
+        }
+
+        private void UpdateWindowSize(object sender, System.Drawing.Size e)
+        {
+            UpdateWindowSize(e);
         }
 
         private void ResetWindowSize(object sender, EventArgs e)
@@ -152,22 +164,6 @@ namespace LoLOCRHub
             Main.MinHeight = 450;
 
             StopCapture();
-        }
-
-        private void InitWindowList()
-        {
-            if (ApiInformation.IsApiContractPresent(typeof(Windows.Foundation.UniversalApiContract).FullName, 8))
-            {
-                var processesWithWindows = from p in Process.GetProcesses()
-                                           where !string.IsNullOrWhiteSpace(p.MainWindowTitle) && WindowEnumerationHelper.IsWindowValidForCapture(p.MainWindowHandle)
-                                           select p;
-                processes = new ObservableCollection<Process>(processesWithWindows);
-                WindowComboBox.ItemsSource = processes;
-            }
-            else
-            {
-                WindowComboBox.IsEnabled = false;
-            }
         }
 
         private void InitComposition(float controlsWidth)
@@ -193,10 +189,11 @@ namespace LoLOCRHub
         private void InitCaptureComponent()
         {
             // Setup the rest of the sample application.
-            sample = new BasicSampleApplication(compositor, actualSize);
+            sample = new BasicSampleApplication(compositor, actualSize, showPreview);
             sample.ContentSizeUpdated += UpdateWindowSize;
             root.Children.InsertAtTop(sample.Visual);
             sample.CaptureWindowClosed += ResetWindowSize;
+            sample.CaptureWindowClosed += StopCapture;
 
             HttpServer = new HttpServer(3002);
 
@@ -217,7 +214,7 @@ namespace LoLOCRHub
                     sample.CapturingLeagueOfLegends();
 
                     //Starting doing OCR on the scene since we now know where to look for what
-                    OCREngineTimer.Start();
+                    OCRTimer.Enabled = true;
 
                     //Start data server
                     HttpServer.AOIList = sample.GetAreasOfInterest();
@@ -231,18 +228,22 @@ namespace LoLOCRHub
 
         private void StopCapture()
         {
-            currentProcess = null;
 
             if (sample.CapturingLoL)
             {
                 //Was capturing league. Stop OCR and Data Server
-                OCREngineTimer.Stop();
+                OCRTimer.Enabled = false;
                 HttpServer.StopServer();
                 sample.CapturingLoL = false;
             }
             sample.StopCapture();
             if (!findLoLTimer.IsEnabled)
                 findLoLTimer.Start();
+        }
+
+        private void StopCapture(object sender, EventArgs e)
+        {
+            StopCapture();
         }
 
         private void FindLoLProcess(object sender, EventArgs e)
@@ -258,25 +259,20 @@ namespace LoLOCRHub
                 sample.StopCapture();
                 Process first = processesWithWindows.First();
                 StartHwndCapture(first.MainWindowHandle, first.MainWindowTitle);
-                currentProcess = first;
+
             }
         }
 
         private void FindValuesInLoL(object sender, Bitmap bitmap)
         {
+            var upscalingFactor = (float)UpscaleFactor.Value;
 
-            OCRTasks.ForEach((t) => { if (t.IsCompleted) t.Dispose(); });
-            OCRTasks.Add(Task.Factory.StartNew(() =>
-            {
-                HttpServer.AOIList = sample.GetAreasOfInterest();
-                HttpServer.AOIList.GetAllAreaOfInterests().ForEach((aoi) =>
-                {
-                    var engine = new OCREngine();
-                    aoi.CurrentContent = engine.GetTextInSubregion(bitmap, aoi.Rect);
-                });
+            OCRThread ocrT = new OCRThread(bitmap, upscalingFactor, new OCRCallback((time) => {
+                HttpServer.UpdateTeams();
+                //Console.WriteLine("Finished Gold OCR in " + time + " milliseconds");
             }));
-
-
+            Thread OCRThread = new Thread(new ThreadStart(ocrT.StartGoldOCR));
+            OCRThread.Start();
         }
 
         private void RequestUpdatedBitmap(object sender, EventArgs e)
@@ -288,18 +284,36 @@ namespace LoLOCRHub
 
         private void ShowPreviewButton_Checked(object sender, RoutedEventArgs e)
         {
+            if (sample == null)
+                return;
+            showPreview = true;
+            sample.RenderPreview = true;
 
+            UpdateWindowSize(sample.CaptureSize);
         }
 
         private void ShowPreviewButton_Unchecked(object sender, RoutedEventArgs e)
         {
+            if (sample == null)
+                return;
+            showPreview = false;
+            sample.RenderPreview = false;
 
+            ReduceWindowToControls();
+        }
+
+        private void ReduceWindowToControls()
+        {
+            Main.MaxWidth = 216;
+            Main.MinWidth = 216;
+
+            Main.MaxHeight = 450;
+            Main.MinHeight = 450;
         }
 
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
             StopCapture();
-            WindowComboBox.SelectedIndex = -1;
         }
 
         private void ESportsTimerButton_Checked(object sender, RoutedEventArgs e)
@@ -310,6 +324,17 @@ namespace LoLOCRHub
         private void ESportsTimerButton_Unchecked(object sender, RoutedEventArgs e)
         {
 
+        }
+
+        private void IncreaseGold_Checked(object sender, RoutedEventArgs e)
+        {
+            HttpServer.OnlyIncreaseGold = true;
+            HttpServer.oldValues.ForEach((l) => l.Clear());
+        }
+
+        private void IncreaseGold_Unchecked(object sender, RoutedEventArgs e)
+        {
+            HttpServer.OnlyIncreaseGold = true;
         }
 
         private void WindowComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -324,15 +349,29 @@ namespace LoLOCRHub
                 try
                 {
                     StartHwndCapture(hwnd, process.MainWindowTitle);
-                    currentProcess = process;
                 }
                 catch (Exception)
                 {
                     Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
-                    processes.Remove(process);
                     comboBox.SelectedIndex = -1;
                 }
             }
+        }
+
+        private void SaveImage_Click(object sender, RoutedEventArgs e)
+        {
+            SaveFileDialog dialog = new SaveFileDialog();
+            if (dialog.ShowDialog() == true)
+            {
+                var temp = dialog.FileName;
+                saveName = temp.Replace(".png", "").Replace(".jpg", "");
+                saveNextFrame = true;
+            }
+        }
+
+        private void UpscaleFactor_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            UpscaleText.Text = "Upscaling Factor [" + (Math.Ceiling(e.NewValue / 0.5) * 0.5) + "][1 - 8]";
         }
 
         //Timer Init
@@ -345,11 +384,69 @@ namespace LoLOCRHub
             findLoLTimer.Tick += FindLoLProcess;
             findLoLTimer.Start();
 
-            OCREngineTimer = new DispatcherTimer()
+            OCRTimer = new System.Timers.Timer
             {
-                Interval = TimeSpan.FromSeconds(1)
+                Interval = 1000
             };
-            OCREngineTimer.Tick += RequestUpdatedBitmap;
+            OCRTimer.Elapsed += RequestUpdatedBitmap;
+        }
+
+    }
+
+    public delegate void OCRCallback(long OCRDuration);
+
+    class OCRThread
+    {
+        private readonly Bitmap bitmap;
+        private readonly float upscaleFactor;
+        private readonly OCRCallback callback;
+
+        public OCRThread(Bitmap bitmap, float upscaleFactor, OCRCallback callback)
+        {
+            this.bitmap = bitmap;
+            this.upscaleFactor = upscaleFactor;
+            this.callback = callback;
+        }
+
+        public void StartGoldOCR()
+        {
+            long startTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+            int currentlyScanning = 0;
+            MainWindow.counter++;
+
+            HttpServer.AOIList = MainWindow.sample.GetAreasOfInterest();
+            HttpServer.AOIList.GetAllAreaOfInterests().ForEach((aoi) =>
+            {
+                var regionBitmap = OCR.Utils.ApplyCrop(bitmap, aoi.Rect);
+                if (upscaleFactor != 1)
+                {
+                    regionBitmap = OCR.Utils.ApplyUpscale(upscaleFactor, regionBitmap);
+                }
+
+                //Do Color Processing to make text clearer
+                switch (aoi.type)
+                {
+                    case Common.AOIType.BlueGold:
+                        OCR.Utils.BlueTextColorPass(regionBitmap);
+                        break;
+                    case Common.AOIType.RedGold:
+                        OCR.Utils.RedTextColorPass(regionBitmap);
+                        break;
+                }
+                
+                if (MainWindow.saveNextFrame)
+                {
+                    regionBitmap.Save(MainWindow.saveName + ((currentlyScanning == 0)? "_RedGold": "_BlueGold") + ".png", ImageFormat.Png);
+                    currentlyScanning = 1;
+                }
+                
+                var engine = new OCREngine();
+                aoi.CurrentContent = engine.GetTextInBitmap(regionBitmap);
+            });
+            if (MainWindow.saveNextFrame)
+                MainWindow.saveNextFrame = false;
+
+            callback?.Invoke(DateTimeOffset.Now.ToUnixTimeMilliseconds() - startTime);
         }
     }
 }

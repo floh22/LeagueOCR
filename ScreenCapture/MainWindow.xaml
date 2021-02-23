@@ -45,24 +45,19 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <StackPanel Margin="10">
-                <ToggleButton x:Name="ShowPreviewButton" Content="Show Preview" Checked="ShowPreviewButton_Checked" Unchecked="ShowPreviewButton_Unchecked" Margin="10" />
-                <ComboBox x:Name="WindowComboBox" Margin="10" SelectionChanged="WindowComboBox_SelectionChanged">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding MainWindowTitle}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                <ToggleButton x:Name="ShowPreviewButton" Content="Show Preview" Checked="ShowPreviewButton_Checked" Unchecked="ShowPreviewButton_Unchecked" Margin="10" IsChecked="True"/>
                 <ToggleButton x:Name="ESportsTimerButton" Content="Use eSports Timer" Checked="ESportsTimerButton_Checked" Unchecked="ESportsTimerButton_Unchecked" Margin="10" />
-                <TextBlock Text="Window Scale" Margin="0,25,0,-10" HorizontalAlignment="Center"/>
-                <Slider x:Name="ScaleSlider" Minimum="0.2" Maximum="1" TickFrequency="0.1" TickPlacement="BottomRight" ValueChanged="ScaleChanged" Value="0.5" Margin="10"/>
+                <ToggleButton x:Name="IncreaseGoldButton" Content="Only increase Gold" Checked="IncreaseGold_Checked" Unchecked="IncreaseGold_Unchecked" Margin="10" />
+                <TextBlock x:Name="UpscaleText" Text="Upscaling Factor [4][1-8]" Margin="0,10,0,-10" HorizontalAlignment="Center"/>
+                <Slider x:Name="UpscaleFactor" Minimum="1" Maximum="8" TickFrequency="0.5" TickPlacement="BottomRight" Value="4" ValueChanged="UpscaleFactor_ValueChanged" Margin="10"/>
             </StackPanel>
-            <Button x:Name="StopButton" Grid.Row="1" Content="Stop Capturing" Click="StopButton_Click" Margin="10" />
+            <TextBlock Grid.Row="1" Text="Window Scale" Margin="0,-10,0,10" HorizontalAlignment="Center"/>
+            <Slider x:Name="ScaleSlider" Grid.Row="2" Minimum="0.2" Maximum="1" TickFrequency="0.1" TickPlacement="BottomRight" ValueChanged="ScaleChanged" Value="0.5" Margin="10"/>
         </Grid>
 
 
         <Grid x:Name="CaptureGrid" Grid.Column="1">
-            <Rectangle Fill="WhiteSmoke" Grid.ColumnSpan="2"/>
+            <Rectangle Fill="WhiteSmoke" Grid.RowSpan="2"/>
         </Grid>
     </Grid>
 </Window>

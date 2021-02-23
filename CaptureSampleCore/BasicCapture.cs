@@ -86,6 +86,7 @@ namespace CaptureSampleCore
                 2,
                 i.Size);
             session = framePool.CreateCaptureSession(i);
+            session.IsCursorCaptureEnabled = false;
             lastSize = i.Size;
 
             framePool.FrameArrived += OnFrameArrived;
@@ -127,24 +128,24 @@ namespace CaptureSampleCore
                     newSize = true;
                     lastSize = frame.ContentSize;
                     swapChain.ResizeBuffers(
-                        2, 
-                        lastSize.Width, 
-                        lastSize.Height, 
-                        SharpDX.DXGI.Format.B8G8R8A8_UNorm, 
+                        2,
+                        lastSize.Width,
+                        lastSize.Height,
+                        SharpDX.DXGI.Format.B8G8R8A8_UNorm,
                         SharpDX.DXGI.SwapChainFlags.None);
                 }
-
-                using (var backBuffer = swapChain.GetBackBuffer<SharpDX.Direct3D11.Texture2D>(0))
-                using (var bitmap = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface))
+                using var bitmap = Direct3D11Helper.CreateSharpDXTexture2D(frame.Surface);
+                if (appWindow.RenderPreview)
                 {
+                    using var backBuffer = swapChain.GetBackBuffer<Texture2D>(0);
                     d3dDevice.ImmediateContext.CopyResource(bitmap, backBuffer);
-                    if(RequestBitmap)
-                    {
-                        RequestBitmap = false;
-                        var tempBitmap = new System.Drawing.Bitmap(bitmap.Description.Width, bitmap.Description.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                        BitmapFromTexture(tempBitmap, bitmap);
-                        appWindow.BitmapCreated(this, tempBitmap);
-                    }
+                }
+                if (RequestBitmap)
+                {
+                    RequestBitmap = false;
+                    var tempBitmap = new System.Drawing.Bitmap(bitmap.Description.Width, bitmap.Description.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    BitmapFromTexture(tempBitmap, bitmap);
+                    appWindow.BitmapCreated(this, tempBitmap);
                 }
 
 

@@ -15,6 +15,8 @@ namespace Common
         public Rectangle Rect;
         public SpriteVisual Sprite;
 
+        public AOIType type;
+
         public string CurrentContent;
 
         public void Dispose()
@@ -22,9 +24,16 @@ namespace Common
             Sprite.Dispose();
         }
 
-        public AreaOfInterest(int X, int Y, int Width, int Height)
+        public AreaOfInterest(int X, int Y, int Width, int Height, AOIType type)
         {
             this.Rect = new Rectangle(X, Y, Width, Height);
+            this.type = type;
         }
+    }
+
+    public enum AOIType
+    {
+        BlueGold,
+        RedGold
     }
 }

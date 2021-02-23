@@ -25,14 +25,10 @@
 using Common;
 using Composition.WindowsRuntimeHelpers;
 using System;
-using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Numerics;
-using System.Threading.Tasks;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
-using Windows.UI;
 using Windows.UI.Composition;
 
 namespace CaptureSampleCore
@@ -50,23 +46,26 @@ namespace CaptureSampleCore
 
         public static CompositionColorBrush aoiBrush;
         private AOIList aoiList;
-        private Size oldSize;
+        public Size CaptureSize;
 
         public float RenderScale = 0.5f;
         public bool CapturingLoL = false;
+        public bool RenderPreview;
 
         public EventHandler<Size> ContentSizeUpdated;
         public EventHandler CaptureWindowClosed;
 
         public EventHandler<Bitmap> BitmapCreated;
 
-        public BasicSampleApplication(Compositor c, Size size)
+        public BasicSampleApplication(Compositor c, Size size, bool RenderPreview)
         {
             compositor = c;
             device = Direct3D11Helper.CreateDevice();
 
             aoiList = new AOIList();
-            oldSize = size;
+            CaptureSize = size;
+
+            this.RenderPreview = RenderPreview;
 
             // Setup the root.
             root = compositor.CreateContainerVisual();
@@ -81,16 +80,19 @@ namespace CaptureSampleCore
             //Setup Aoi brush
             aoiBrush = compositor.CreateColorBrush(Windows.UI.Color.FromArgb(0x8A, 0xC2, 0xF1, 0xA3));
 
-            var shadow = compositor.CreateDropShadow();
-            shadow.Mask = brush;
+
+            //Drop shadow on preview window
+            //var shadow = compositor.CreateDropShadow();
+            //shadow.Mask = brush;
 
             content = compositor.CreateSpriteVisual();
             content.AnchorPoint = new Vector2(0f);
             //content.RelativeOffsetAdjustment = new Vector3(0.5f, 0.5f, 0);
             //content.RelativeSizeAdjustment = Vector2.Zero;
-            content.Size = new Vector2(oldSize.Width, oldSize.Height);
+            content.Size = new Vector2(CaptureSize.Width, CaptureSize.Height);
             content.Brush = brush;
-            content.Shadow = shadow;
+            //Disabled drop shadow for now since it really isnt needed and has to be disabled if preview is turned off
+            //content.Shadow = shadow;
             root.Children.InsertAtTop(content);
 
             //Debug area of interest
@@ -110,8 +112,8 @@ namespace CaptureSampleCore
 
         public void CreateAreasOfInterest()
         {
-            aoiList.Blue_Gold = new AreaOfInterest(760, 15, 90, 25);
-            aoiList.Red_Gold = new AreaOfInterest(1145, 15, 90, 25);
+            aoiList.Blue_Gold = new AreaOfInterest(757, 15, 90, 25, AOIType.BlueGold);
+            aoiList.Red_Gold = new AreaOfInterest(1140, 15, 90, 25, AOIType.RedGold);
 
 
             aoiList.GetAllAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
@@ -124,6 +126,8 @@ namespace CaptureSampleCore
             s.Size = new Vector2(aoi.Rect.Width, aoi.Rect.Height);
             s.Offset = new Vector3(aoi.Rect.X, aoi.Rect.Y, 0);
             s.Brush = BasicSampleApplication.aoiBrush;
+            s.Scale = new Vector3(RenderScale, RenderScale, 1);
+            s.Offset = new Vector3(aoi.Rect.X * RenderScale, aoi.Rect.Y * RenderScale, 0);
 
             BasicSampleApplication.content.Children.InsertAtBottom(s);
 
@@ -140,7 +144,7 @@ namespace CaptureSampleCore
         public void UpdateScale(float scale)
         {
             this.RenderScale = scale;
-            var newSize = new Vector2(oldSize.Width * RenderScale, oldSize.Height * RenderScale);
+            var newSize = new Vector2(CaptureSize.Width * RenderScale, CaptureSize.Height * RenderScale);
             if (newSize.X < 800 || newSize.Y < 450)
                 return;
             content.Size = newSize;
@@ -150,19 +154,19 @@ namespace CaptureSampleCore
                 aoi.Sprite.Offset = new Vector3(aoi.Rect.X * RenderScale, aoi.Rect.Y * RenderScale, 0);
             });
 
-            OnUpdateContentSize(oldSize);
+            OnUpdateContentSize(CaptureSize);
         }
 
         public void UpdateContentSize(Size newSize)
         {
             var updatedSize = new Vector2(newSize.Width * RenderScale, newSize.Height * RenderScale);
-            if(updatedSize.X < 800)
+            if (updatedSize.X < 800)
             {
                 var x = 800 / updatedSize.X;
                 updatedSize.X = 800;
                 updatedSize.Y *= x;
             }
-            if(updatedSize.Y < 450)
+            if (updatedSize.Y < 450)
             {
                 var y = 450 / updatedSize.Y;
                 updatedSize.Y = 450;
@@ -174,9 +178,9 @@ namespace CaptureSampleCore
                 aoi.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
             });
 
-            oldSize = newSize;
+            CaptureSize = newSize;
 
-            OnUpdateContentSize(oldSize);
+            OnUpdateContentSize(CaptureSize);
         }
 
         protected virtual void OnUpdateContentSize(Size e)

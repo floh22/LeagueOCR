@@ -10,8 +10,6 @@ namespace Server
     class Program
     {
 
-        public static HttpServer HttpServer;
-
         static void Main(string[] args)
         {
             /*
