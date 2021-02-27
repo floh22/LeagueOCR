@@ -1,4 +1,5 @@
-﻿using Server.Models;
+﻿using Common;
+using Server.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,8 +35,8 @@ namespace Server.Controllers
 
         public static void UpdateTeams()
         {
-            string blueGoldText = HttpServer.AOIList.Blue_Gold.CurrentContent;
-            string redGoldText = HttpServer.AOIList.Red_Gold.CurrentContent;
+            string blueGoldText = AOIList.Blue_Gold.CurrentContent;
+            string redGoldText = AOIList.Red_Gold.CurrentContent;
             var blueTeam = HttpServer.blueTeam;
             var redTeam = HttpServer.redTeam;
             //Console.WriteLine(blueGoldText + ", " + redGoldText);

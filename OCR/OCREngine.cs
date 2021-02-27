@@ -13,45 +13,7 @@ namespace OCR
         {
             //_engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default, @"./tessdata/configs.txt");
             _engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.LstmOnly);
-            _engine.SetVariable("tessedit_char_whitelist", "01234567890OlI.,ko");
             //_engine.SetVariable("tessedit_do_invert", "0");
-        }
-
-        public void Debug()
-        {
-            var testImagePath = "./GoldRed.png";
-
-            var img = Pix.LoadFromFile(testImagePath);
-
-
-            var text = GetTextInImage(img, new Rect(0, 0, img.Width, img.Height));
-
-            Console.WriteLine("Text (GetText): \r\n{0}", text);
-
-
-
-            Console.Write("Press any key to continue . . . ");
-            Console.ReadKey(true);
-        }
-
-
-        public string GetTextInImage(Pix image, Rect subRegion)
-        {
-            try
-            {
-                string unfilteredOut = _engine.Process(image, subRegion).GetText();
-                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "");
-                return cleaned;
-            }
-            catch (Exception e)
-            {
-                Trace.TraceError(e.ToString());
-                Console.WriteLine("Unexpected Error: " + e.Message);
-                Console.WriteLine("Details: ");
-                Console.WriteLine(e.ToString());
-                return "";
-            }
-
         }
 
         public string GetTextInSubregion(System.Drawing.Bitmap bitmap, System.Drawing.Rectangle subRegion)
@@ -73,13 +35,40 @@ namespace OCR
             }
         }
 
-        public string GetTextInBitmap(System.Drawing.Bitmap bitmap)
+        public string GetGoldInBitmap(System.Drawing.Bitmap bitmap)
         {
+            //Include some letters that look similar to numbers just incase that helps Tesseract pick up some edge cases
+            //I'm not actually sure this is always helpful but more often than not Tesseract will output nothing instead of misreading
+            _engine.SetVariable("tessedit_char_whitelist", "0Oo1lI2345S678B9.,k");
+
             try
             {
                 _engine.DefaultPageSegMode = PageSegMode.SingleBlock;
                 string unfilteredOut = _engine.Process(bitmap).GetText();
-                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(",", ".");
+                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(",", ".").Replace("S", "5").Replace("B", "8");
+                return cleaned;
+            }
+            catch (Exception e)
+            {
+                Trace.TraceError(e.ToString());
+                Console.WriteLine("Unexpected Error: " + e.Message);
+                Console.WriteLine("Details: ");
+                Console.WriteLine(e.ToString());
+                return "";
+            }
+        }
+
+        public string GetTimeInBitmap(System.Drawing.Bitmap bitmap)
+        {
+            //Include some letters that look similar to numbers just incase that helps Tesseract pick up some edge cases
+            //I'm not actually sure this is always helpful but more often than not Tesseract will output nothing instead of misreading
+            _engine.SetVariable("tessedit_char_whitelist", "0Oo1lI2345S678B9:;");
+
+            try
+            {
+                _engine.DefaultPageSegMode = PageSegMode.SingleBlock;
+                string unfilteredOut = _engine.Process(bitmap).GetText();
+                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(";", ":").Replace("S", "5").Replace("B", "8");
                 return cleaned;
             }
             catch (Exception e)

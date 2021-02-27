@@ -23,6 +23,7 @@
 //  ---------------------------------------------------------------------------------
 
 using CaptureSampleCore;
+using Common;
 using Composition.WindowsRuntimeHelpers;
 using Microsoft.Owin;
 using Microsoft.Win32;
@@ -48,6 +49,8 @@ using System.Windows.Threading;
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Capture;
 using Windows.UI.Composition;
+using static Common.Utils;
+using static LoLOCRHub.Utils;
 
 [assembly: OwinStartup(typeof(Startup))]
 
@@ -65,9 +68,10 @@ namespace LoLOCRHub
 
         DispatcherTimer findLoLTimer;
         System.Timers.Timer OCRTimer;
+        private double OCRInterval = 1000;
 
         public static BasicSampleApplication sample;
-
+        public static DataManager dataManager;
         private Server.HttpServer HttpServer;
 
         private System.Drawing.Size actualSize;
@@ -79,7 +83,7 @@ namespace LoLOCRHub
         public static bool showPreview = true;
         public static string saveName;
 
-        public static int counter = 0;
+        private bool doIM;
 
         public MainWindow()
         {
@@ -104,6 +108,8 @@ namespace LoLOCRHub
 
             //actualSize = new System.Drawing.Size((int)((MainWindow.ActualWidth - 200) * dpiX), (int)(MainWindow.ActualHeight * dpiY);
             actualSize = new System.Drawing.Size((int)Main.ActualWidth - 200, (int)Main.ActualHeight);
+
+            dataManager = new DataManager();
 
             InitComposition(controlsWidth);
             InitCaptureComponent();
@@ -211,13 +217,15 @@ namespace LoLOCRHub
 
                 if (pName.Equals("League of Legends (TM) Client")) {
                     //Capturing League. Start OCR and Data Server
-                    sample.CapturingLeagueOfLegends();
+                    sample.CapturingLeagueOfLegends(ESportsTimerButton.IsChecked.Value);
 
                     //Starting doing OCR on the scene since we now know where to look for what
                     OCRTimer.Enabled = true;
 
+                    //Make sure to get dragon Types on startup
+                    doIM = true;
+
                     //Start data server
-                    HttpServer.AOIList = sample.GetAreasOfInterest();
                     HttpServer.StartServer();
                 }
             }
@@ -265,11 +273,49 @@ namespace LoLOCRHub
 
         private void FindValuesInLoL(object sender, Bitmap bitmap)
         {
-            var upscalingFactor = (float)UpscaleFactor.Value;
+            //Hardcode upscale factor for now since this shouldn't get changed by users in UI
+            //TODO Config file
+            var upscalingFactor = (float)4;
+
+            drakeCount.Value = HttpServer.dragon.TimesTakenInMatch;
+            baronCount.Value = HttpServer.baron.TimesTakenInMatch;
+
+            if(doIM)
+            {
+                doIM = false;
+                if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
+                    doIM = true;
+            }
 
             OCRThread ocrT = new OCRThread(bitmap, upscalingFactor, new OCRCallback((time) => {
+                //If OCR takes longer than the timer interval, slow down OCR
+                //Conversely, if OCR is far faster than the interval, speed up to 1x second
+                if(time >= (long) OCRInterval)
+                {
+                    OCRInterval += 1000 * Math.Floor((double)(time / OCRInterval));
+                    OCRTimer.Interval = OCRInterval;
+                } else if ( OCRInterval > 1000 && (long) OCRInterval > time * 2)
+                {
+                    OCRInterval = Math.Max(OCRInterval / 2, 1000);
+                    OCRTimer.Interval = OCRInterval;
+                }
+
+                var oldDragonIsAlive = HttpServer.dragon.IsAlive;
+                var oldBaronIsAlive = HttpServer.baron.IsAlive;
+                HttpServer.UpdateNeutralTimers();
+                if(!HttpServer.dragon.IsAlive && oldDragonIsAlive)
+                {
+                    Console.WriteLine("Dragon Killed");
+                    HttpServer.oldTypes.Add((DragonType)Enum.Parse(typeof(DragonType), HttpServer.dragon.Type));
+                    HttpServer.dragon.TimesTakenInMatch++;
+                    if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
+                        doIM = true;
+                }
+                if(!HttpServer.baron.IsAlive && oldBaronIsAlive)
+                {
+                    HttpServer.baron.TimesTakenInMatch++;
+                }
                 HttpServer.UpdateTeams();
-                //Console.WriteLine("Finished Gold OCR in " + time + " milliseconds");
             }));
             Thread OCRThread = new Thread(new ThreadStart(ocrT.StartGoldOCR));
             OCRThread.Start();
@@ -278,6 +324,35 @@ namespace LoLOCRHub
         private void RequestUpdatedBitmap(object sender, EventArgs e)
         {
             sample.RequestCurrentBitmap();
+        }
+
+        private bool DoDragonTypeImageMatching(Bitmap bmp, out string content)
+        {
+            var resultList = dataManager.GetClosestDragonType(bmp).OrderBy(x => x.distance);
+            var result = resultList.ElementAt(0);
+            content = Enum.GetName(typeof(DragonType), result.type);
+
+            //Try to filter out some invalid dragon possibilities
+            if (!IsValidDragon(result))
+            {
+                return false;
+            }
+
+            Console.WriteLine("Valid Dragon Type: " + content + " (" + result.confidence.ToString("0.000") + ")");
+            return true;
+        }
+
+        private bool IsValidDragon(DragonTypeResult result)
+        {
+            /*
+            return !((result.type == DragonType.elder && HttpServer.oldTypes.Count < 4) ||
+                (HttpServer.oldTypes.Count >= 3 && (result.type != HttpServer.oldTypes.ElementAt(2) || result.type != DragonType.elder)) ||
+                (HttpServer.oldTypes.Count < 3 && HttpServer.oldTypes.Contains(result.type)) ||
+                result.confidence < 0.75f);
+            */
+
+            //Simpler validation since confidence seems to be a rather good indicator if the result is valid
+            return result.confidence > 0.75f;
         }
 
         //UI Elements
@@ -318,12 +393,13 @@ namespace LoLOCRHub
 
         private void ESportsTimerButton_Checked(object sender, RoutedEventArgs e)
         {
-
+            if (sample != null)
+                sample.UpdateESportsTimers();
         }
 
         private void ESportsTimerButton_Unchecked(object sender, RoutedEventArgs e)
         {
-
+            sample.UpdateNormalTimers();
         }
 
         private void IncreaseGold_Checked(object sender, RoutedEventArgs e)
@@ -337,27 +413,6 @@ namespace LoLOCRHub
             HttpServer.OnlyIncreaseGold = true;
         }
 
-        private void WindowComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            var comboBox = (ComboBox)sender;
-            var process = (Process)comboBox.SelectedItem;
-
-            if (process != null)
-            {
-                StopCapture();
-                var hwnd = process.MainWindowHandle;
-                try
-                {
-                    StartHwndCapture(hwnd, process.MainWindowTitle);
-                }
-                catch (Exception)
-                {
-                    Debug.WriteLine($"Hwnd 0x{hwnd.ToInt32():X8} is not valid for capture!");
-                    comboBox.SelectedIndex = -1;
-                }
-            }
-        }
-
         private void SaveImage_Click(object sender, RoutedEventArgs e)
         {
             SaveFileDialog dialog = new SaveFileDialog();
@@ -368,11 +423,16 @@ namespace LoLOCRHub
                 saveNextFrame = true;
             }
         }
-
-        private void UpscaleFactor_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void drakeCount_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            UpscaleText.Text = "Upscaling Factor [" + (Math.Ceiling(e.NewValue / 0.5) * 0.5) + "][1 - 8]";
+            HttpServer.dragon.TimesTakenInMatch = drakeCount.Value.Value;
         }
+
+        private void baronCount_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            HttpServer.baron.TimesTakenInMatch = baronCount.Value.Value;
+        }
+
 
         //Timer Init
         private void StartTimers()
@@ -390,7 +450,6 @@ namespace LoLOCRHub
             };
             OCRTimer.Elapsed += RequestUpdatedBitmap;
         }
-
     }
 
     public delegate void OCRCallback(long OCRDuration);
@@ -411,11 +470,8 @@ namespace LoLOCRHub
         public void StartGoldOCR()
         {
             long startTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            int currentlyScanning = 0;
-            MainWindow.counter++;
 
-            HttpServer.AOIList = MainWindow.sample.GetAreasOfInterest();
-            HttpServer.AOIList.GetAllAreaOfInterests().ForEach((aoi) =>
+            AOIList.GetOCRAreaOfInterests().ForEach((aoi) =>
             {
                 var regionBitmap = OCR.Utils.ApplyCrop(bitmap, aoi.Rect);
                 if (upscaleFactor != 1)
@@ -428,25 +484,43 @@ namespace LoLOCRHub
                 {
                     case Common.AOIType.BlueGold:
                         OCR.Utils.BlueTextColorPass(regionBitmap);
+                        aoi.CurrentContent = DoGoldOCR(regionBitmap);
                         break;
                     case Common.AOIType.RedGold:
-                        OCR.Utils.RedTextColorPass(regionBitmap);
+                        //OCR.Utils.RedTextColorPass(regionBitmap);
+                        OCR.Utils.ApplyBrightnessColorMask(regionBitmap);
+                        aoi.CurrentContent = DoGoldOCR(regionBitmap);
+                        break;
+                    case Common.AOIType.ESportsTimer:
+                        OCR.Utils.ApplyBrightnessColorMask(regionBitmap);
+                        aoi.CurrentContent = DoTimeOCR(regionBitmap);
+                        break;
+                    case Common.AOIType.NormalTimer:
+                        OCR.Utils.ApplyBrightnessColorMask(regionBitmap);
+                        aoi.CurrentContent = DoTimeOCR(regionBitmap);
                         break;
                 }
-                
+
                 if (MainWindow.saveNextFrame)
-                {
-                    regionBitmap.Save(MainWindow.saveName + ((currentlyScanning == 0)? "_RedGold": "_BlueGold") + ".png", ImageFormat.Png);
-                    currentlyScanning = 1;
-                }
-                
-                var engine = new OCREngine();
-                aoi.CurrentContent = engine.GetTextInBitmap(regionBitmap);
+                    regionBitmap.Save(MainWindow.saveName + nameof(aoi) + ".png", ImageFormat.Png);
+             
             });
             if (MainWindow.saveNextFrame)
                 MainWindow.saveNextFrame = false;
 
             callback?.Invoke(DateTimeOffset.Now.ToUnixTimeMilliseconds() - startTime);
+        }
+
+        private string DoGoldOCR(Bitmap bmp)
+        {
+            var engine = new OCREngine();
+            return engine.GetGoldInBitmap(bmp);
+        }
+
+        private string DoTimeOCR(Bitmap bmp)
+        {
+            var engine = new OCREngine();
+            return engine.GetTimeInBitmap(bmp);
         }
     }
 }

@@ -29,11 +29,21 @@ namespace Common
             this.Rect = new Rectangle(X, Y, Width, Height);
             this.type = type;
         }
+
+        public void Update(int X, int Y, int Width, int Height, AOIType type)
+        {
+            this.Rect = new Rectangle(X, Y, Width, Height);
+            this.Sprite.Dispose();
+        }
     }
 
     public enum AOIType
     {
         BlueGold,
-        RedGold
+        RedGold,
+        ESportsTimer,
+        DragonType,
+        SmallDragonType,
+        NormalTimer
     }
 }

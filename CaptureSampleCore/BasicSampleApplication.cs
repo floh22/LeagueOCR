@@ -45,7 +45,6 @@ namespace CaptureSampleCore
         private BasicCapture capture;
 
         public static CompositionColorBrush aoiBrush;
-        private AOIList aoiList;
         public Size CaptureSize;
 
         public float RenderScale = 0.5f;
@@ -62,7 +61,6 @@ namespace CaptureSampleCore
             compositor = c;
             device = Direct3D11Helper.CreateDevice();
 
-            aoiList = new AOIList();
             CaptureSize = size;
 
             this.RenderPreview = RenderPreview;
@@ -99,9 +97,9 @@ namespace CaptureSampleCore
             //aoiList.OtherAreas.Add(new AreaOfInterest(0, 0, 960, 540));
         }
 
-        public void CapturingLeagueOfLegends()
+        public void CapturingLeagueOfLegends(bool useESportsTimers)
         {
-            CreateAreasOfInterest();
+            CreateAreasOfInterest(useESportsTimers);
             CapturingLoL = true;
         }
 
@@ -110,18 +108,52 @@ namespace CaptureSampleCore
             DeleteAllAreasOfInterest();
         }
 
-        public void CreateAreasOfInterest()
+        public void CreateAreasOfInterest(bool useESportsTimers)
         {
-            aoiList.Blue_Gold = new AreaOfInterest(757, 15, 90, 25, AOIType.BlueGold);
-            aoiList.Red_Gold = new AreaOfInterest(1140, 15, 90, 25, AOIType.RedGold);
+            AOIList.Blue_Gold = new AreaOfInterest(757, 15, 90, 25, AOIType.BlueGold);
+            AOIList.Red_Gold = new AreaOfInterest(1140, 15, 90, 25, AOIType.RedGold);
+            if(useESportsTimers)
+            {
+                AOIList.Dragon_Timer = new AreaOfInterest(90, 45, 50, 20, AOIType.ESportsTimer);
+                AOIList.Dragon_Type = new AreaOfInterest(40, 35, 42, 42, AOIType.DragonType);
+                AOIList.Baron_Timer = new AreaOfInterest(1815, 45, 60, 20, AOIType.ESportsTimer);
+            } else
+            {
+                AOIList.Dragon_Timer = new AreaOfInterest(1860, 748, 60, 20, AOIType.NormalTimer);
+                AOIList.Dragon_Type = new AreaOfInterest(1837, 746, 25, 25, AOIType.SmallDragonType);
+                AOIList.Baron_Timer = new AreaOfInterest(1770, 748, 60, 20, AOIType.NormalTimer);
+            }
 
+            AOIList.GetOCRAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
+            AOIList.GetIMAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
+        }
 
-            aoiList.GetAllAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
+        public void UpdateESportsTimers()
+        {
+
+            AOIList.Dragon_Timer.Update(90, 45, 50, 20, AOIType.ESportsTimer);
+            AOIList.Dragon_Type.Update(40, 35, 42, 42, AOIType.DragonType);
+            AOIList.Baron_Timer.Update(1815, 45, 60, 20, AOIType.ESportsTimer);
+
+            AOIList.Dragon_Timer.Sprite = CreateSprite(AOIList.Dragon_Timer);
+            AOIList.Dragon_Type.Sprite = CreateSprite(AOIList.Dragon_Type);
+            AOIList.Baron_Timer.Sprite = CreateSprite(AOIList.Baron_Timer);
+        }
+
+        public void UpdateNormalTimers()
+        {
+            AOIList.Dragon_Timer.Update(1860, 748, 60, 20, AOIType.NormalTimer);
+            AOIList.Dragon_Type.Update(1837, 746, 25, 25, AOIType.SmallDragonType);
+            AOIList.Baron_Timer.Update(1770, 748, 60, 20, AOIType.NormalTimer);
+
+            AOIList.Dragon_Timer.Sprite = CreateSprite(AOIList.Dragon_Timer);
+            AOIList.Dragon_Type.Sprite = CreateSprite(AOIList.Dragon_Type);
+            AOIList.Baron_Timer.Sprite = CreateSprite(AOIList.Baron_Timer);
         }
 
         private SpriteVisual CreateSprite(AreaOfInterest aoi)
         {
-            SpriteVisual s = BasicSampleApplication.compositor.CreateSpriteVisual();
+            SpriteVisual s = compositor.CreateSpriteVisual();
             s.AnchorPoint = new Vector2(0f);
             s.Size = new Vector2(aoi.Rect.Width, aoi.Rect.Height);
             s.Offset = new Vector3(aoi.Rect.X, aoi.Rect.Y, 0);
@@ -138,7 +170,7 @@ namespace CaptureSampleCore
         public void DeleteAllAreasOfInterest()
         {
             content.Children.RemoveAll();
-            aoiList.Clear();
+            AOIList.Clear();
         }
 
         public void UpdateScale(float scale)
@@ -148,7 +180,13 @@ namespace CaptureSampleCore
             if (newSize.X < 800 || newSize.Y < 450)
                 return;
             content.Size = newSize;
-            aoiList.GetAllAreaOfInterests().ForEach((aoi) =>
+            AOIList.GetOCRAreaOfInterests().ForEach((aoi) =>
+            {
+                aoi.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
+                aoi.Sprite.Offset = new Vector3(aoi.Rect.X * RenderScale, aoi.Rect.Y * RenderScale, 0);
+            });
+
+            AOIList.GetIMAreaOfInterests().ForEach((aoi) =>
             {
                 aoi.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
                 aoi.Sprite.Offset = new Vector3(aoi.Rect.X * RenderScale, aoi.Rect.Y * RenderScale, 0);
@@ -173,7 +211,7 @@ namespace CaptureSampleCore
                 updatedSize.X += y;
             }
             content.Size = updatedSize;
-            aoiList.GetAllAreaOfInterests().ForEach((aoi) =>
+            AOIList.GetOCRAreaOfInterests().ForEach((aoi) =>
             {
                 aoi.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
             });
@@ -205,7 +243,7 @@ namespace CaptureSampleCore
             brush.Dispose();
             device.Dispose();
             aoiBrush.Dispose();
-            aoiList.DisposeAll();
+            AOIList.DisposeAll();
         }
 
         public void StartCaptureFromItem(GraphicsCaptureItem item)
@@ -225,11 +263,6 @@ namespace CaptureSampleCore
             brush.Surface = null;
             if (CapturingLoL)
                 StopCapturingLeagueOfLegends();
-        }
-
-        public AOIList GetAreasOfInterest()
-        {
-            return aoiList;
         }
 
         public void RequestCurrentBitmap()

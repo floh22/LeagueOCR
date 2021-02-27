@@ -13,6 +13,7 @@ namespace OCR
 {
     public class Utils
     {
+        private const int PixelSize = 4;
         public static Bitmap ConvertToBitmap(string fileName)
         {
             Bitmap bitmap;
@@ -53,8 +54,6 @@ namespace OCR
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
-            int PixelSize = 4;
-
             for (int y = 0; y < bitmapdata.Height; y++)
             {
                 byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
@@ -74,8 +73,6 @@ namespace OCR
         {
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-
-            int PixelSize = 4;
 
             for (int y = 0; y < bitmapdata.Height; y++)
             {
@@ -98,8 +95,6 @@ namespace OCR
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
-            int PixelSize = 4;
-
             for (int y = 0; y < bitmapdata.Height; y++)
             {
                 byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
@@ -121,8 +116,6 @@ namespace OCR
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
-            int PixelSize = 4;
-
             for (int y = 0; y < bitmapdata.Height; y++)
             {
                 byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
@@ -134,57 +127,6 @@ namespace OCR
                     destPixels[xPixelSize + 1] = isLuminous; // G
                     destPixels[xPixelSize + 2] = isLuminous; // R
                     //destPixels[xPixelSize + 3] = isLuminous; // A
-                }
-            }
-            bmp.UnlockBits(bitmapdata);
-        }
-
-
-        public static unsafe void ApplyContrastThreshholdInversion(double contrast, int threshhold, Bitmap bmp)
-        {
-            byte[] contrast_lookup = new byte[256];
-            double newValue = 0;
-            double c = (100.0 + contrast) / 100.0;
-
-            c *= c;
-
-            for (int i = 0; i < 256; i++)
-            {
-                newValue = (double)i;
-                newValue /= 255.0;
-                newValue -= 0.5;
-                newValue *= c;
-                newValue += 0.5;
-                newValue *= 255;
-
-                if (newValue < 0)
-                    newValue = 0;
-                if (newValue > 255)
-                    newValue = 255;
-                contrast_lookup[i] = (byte)newValue;
-            }
-
-            var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
-                System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-
-            int PixelSize = 4;
-
-            for (int y = 0; y < bitmapdata.Height; y++)
-            {
-                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
-                for (int x = 0; x < bitmapdata.Width; x++)
-                {
-                    var xPixelSize = x * PixelSize;
-                    var contrastBlue = contrast_lookup[destPixels[xPixelSize]];
-                    var contrastRed = contrast_lookup[destPixels[xPixelSize + 1]];
-                    var contrastGreen = contrast_lookup[destPixels[xPixelSize + 2]];
-                    //Visual Threshhold based on Human perception
-                    //byte pixelValue = (((contrastBlue * 0.07 + contrastGreen * 0.72 + contrastRed * 0.21 > threshhold) ? (byte)255 : (byte)0) == 0)? 255 : 0;
-                    byte pixelValue = (((contrastBlue * (1 / 3) + contrastGreen * (1 / 3) + contrastRed * (1 / 3) > threshhold) ? (byte)255 : (byte)0) == 0) ? 255 : 0;
-                    destPixels[xPixelSize] = pixelValue;         // B
-                    destPixels[xPixelSize + 1] = pixelValue; // G
-                    destPixels[xPixelSize + 2] = pixelValue; // R
-                    //destPixels[xPixelSize + 3] = pixelValue; // A
                 }
             }
             bmp.UnlockBits(bitmapdata);
@@ -209,8 +151,6 @@ namespace OCR
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
-            int PixelSize = 4;
-
             for (int y = 0; y < bitmapdata.Height; y++)
             {
                 byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
@@ -219,7 +159,7 @@ namespace OCR
                     var xPixelSize = x * PixelSize;
                     //Since League has a very blue background, the same approach as for red text cant be used.
                     //Instead, any pixel with a sufficiently large red value will be filtered out 
-                    if((destPixels[xPixelSize + 2] > 7))
+                    if ((destPixels[xPixelSize + 2] > 7))
                     {
                         destPixels[xPixelSize] = 255;         // B
                         destPixels[xPixelSize + 1] = 255; // G
@@ -231,12 +171,80 @@ namespace OCR
             bmp.UnlockBits(bitmapdata);
         }
 
+        public static unsafe void WhiteTextColorPass(Bitmap bmp)
+        {
+            var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
+                            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            for (int y = 0; y < bitmapdata.Height; y++)
+            {
+                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
+                for (int x = 0; x < bitmapdata.Width; x++)
+                {
+                    var xPixelSize = x * PixelSize;
+                    //Since the text received here isnt purely white but is often tinted, just mask very dark pixels. Since the text is so bright, this should be fine
+                    if (destPixels[xPixelSize] + destPixels[xPixelSize + 1] + destPixels[xPixelSize + 2] < 180)
+                    {
+                        destPixels[xPixelSize] = 255;     // B
+                        destPixels[xPixelSize + 1] = 255; // G
+                        destPixels[xPixelSize + 2] = 255; // R
+                    }
+
+                }
+            }
+            bmp.UnlockBits(bitmapdata);
+        }
+
+        public static unsafe void ApplyBrightnessColorMask(Bitmap bmp)
+        {
+            var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
+                            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+
+            short brightestPixel = 0;
+            //Find brightest Color in the region
+            for (int y = 0; y < bitmapdata.Height; y++)
+            {
+                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
+                for (int x = 0; x < bitmapdata.Width; x++)
+                {
+                    var xPixelSize = x * PixelSize;
+                    var brightness = destPixels[xPixelSize] + destPixels[xPixelSize + 1] + destPixels[xPixelSize + 2];
+                    if (brightness > brightestPixel)
+                    {
+                        brightestPixel = (short) brightness;
+                    }
+                }
+            }
+
+            //Darken from the brightest Pixel to hopefully get the full numbers
+            brightestPixel -= 150;
+
+            //Filter Pixels based on brightest Color just calculated
+            for (int y = 0; y < bitmapdata.Height; y++)
+            {
+                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
+                for (int x = 0; x < bitmapdata.Width; x++)
+                {
+                    var xPixelSize = x * PixelSize;
+                    if (destPixels[xPixelSize] + destPixels[xPixelSize + 1] + destPixels[xPixelSize + 2] < brightestPixel)
+                    {
+                        destPixels[xPixelSize] = 255;     // B
+                        destPixels[xPixelSize + 1] = 255; // G
+                        destPixels[xPixelSize + 2] = 255; // R
+                        destPixels[xPixelSize + 3] = 255; // A
+                    }
+                }
+            }
+
+
+            bmp.UnlockBits(bitmapdata);
+        }
+
         public static unsafe void RedTextColorPass(Bitmap bmp)
         {
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-
-            int PixelSize = 4;
 
             for (int y = 0; y < bitmapdata.Height; y++)
             {
@@ -265,7 +273,7 @@ namespace OCR
 
         public static void ApplyUpscale(float upscaleValue, Rectangle rect)
         {
-            rect.X = (int) (rect.X * upscaleValue);
+            rect.X = (int)(rect.X * upscaleValue);
             rect.Y = (int)(rect.Y * upscaleValue);
             rect.Width = (int)(rect.Width * upscaleValue);
             rect.Height = (int)(rect.Height * upscaleValue);
@@ -282,6 +290,105 @@ namespace OCR
             Convolution C = new Convolution();
             C.Matrix = m;
             C.Convolution3x3(ref bmp);
+        }
+
+        public static unsafe void ApplyFullOpaque(Bitmap bmp)
+        {
+            var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
+                            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            for (int y = 0; y < bitmapdata.Height; y++)
+            {
+                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
+                for (int x = 0; x < bitmapdata.Width; x++)
+                {
+                    var xPixelSize = x * PixelSize;
+                    //If the Pixel is very transparent, just make it black
+                    if (destPixels[xPixelSize + 3] <= 128)
+                    {
+                        destPixels[xPixelSize] = 0;     // B
+                        destPixels[xPixelSize + 1] = 0; // G
+                        destPixels[xPixelSize + 2] = 0; // R
+                    }
+                    //Remove Transparency
+                    destPixels[xPixelSize + 3] = 255;   // A
+                }
+            }
+            bmp.UnlockBits(bitmapdata);
+        }
+
+        public static unsafe void RemoveGold(Bitmap bmp)
+        {
+            var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
+                            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            for (int y = 0; y < bitmapdata.Height; y++)
+            {
+                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
+                for (int x = 0; x < bitmapdata.Width; x++)
+                {
+                    var xPixelSize = x * PixelSize;
+                    //Remove Gold colors. Try to not remove Brown
+                    if ((destPixels[xPixelSize + 2] >= 125 && destPixels[xPixelSize + 2] <= 135) && destPixels[xPixelSize + 1] >= 90 && destPixels[xPixelSize + 1] <= 110 && (destPixels[xPixelSize] < 20))
+                    {
+                        destPixels[xPixelSize] = 0;     // B
+                        destPixels[xPixelSize + 1] = 0; // G
+                        destPixels[xPixelSize + 2] = 0; // R
+                    }
+                }
+            }
+            bmp.UnlockBits(bitmapdata);
+        }
+
+        public static unsafe Color CalculateAverageColor(Bitmap bm)
+        {
+            int width = bm.Width;
+            int height = bm.Height;
+            int red = 0;
+            int green = 0;
+            int blue = 0;
+            int minDiversion = 15; // drop pixels that do not differ by at least minDiversion between color values (white, gray or black)
+            int dropped = 0; // keep track of dropped pixels
+            long[] totals = new long[] { 0, 0, 0 };
+
+            BitmapData srcData = bm.LockBits(new Rectangle(0, 0, bm.Width, bm.Height), ImageLockMode.ReadOnly, bm.PixelFormat);
+            int stride = srcData.Stride;
+            IntPtr Scan0 = srcData.Scan0;
+
+            unsafe
+            {
+                byte* p = (byte*)(void*)Scan0;
+
+                for (int y = 0; y < height; y++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        int idx = (y * stride) + x * PixelSize;
+                        red = p[idx + 2];
+                        green = p[idx + 1];
+                        blue = p[idx];
+                        if (Math.Abs(red - green) > minDiversion || Math.Abs(red - blue) > minDiversion || Math.Abs(green - blue) > minDiversion)
+                        {
+                            totals[2] += red;
+                            totals[1] += green;
+                            totals[0] += blue;
+                        }
+                        else
+                        {
+                            dropped++;
+                        }
+                    }
+                }
+            }
+
+            int count = width * height - dropped;
+            if (count == 0)
+                count = 1;
+            int avgR = (int)(totals[2] / count);
+            int avgG = (int)(totals[1] / count);
+            int avgB = (int)(totals[0] / count);
+
+            return Color.FromArgb(avgR, avgG, avgB);
         }
     }
 
