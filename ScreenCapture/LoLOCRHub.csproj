@@ -72,15 +72,19 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <DebugType>full</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>8.0</LangVersion>
     <ErrorReport>prompt</ErrorReport>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>LoLOCRHub.App</StartupObject>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>wardIcon.ico</ApplicationIcon>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Xml" />
@@ -103,6 +107,8 @@
     </ApplicationDefinition>
     <Compile Include="DataManager.cs" />
     <Compile Include="MonitorEnumerationHelper.cs" />
+    <Compile Include="OCRTimer.cs" />
+    <Compile Include="Settings.cs" />
     <Compile Include="WindowEnumerationHelper.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -223,6 +229,7 @@
     <Content Include="cache\dragon_icons\ocean.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Resource Include="wardIcon.ico" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="cache\summoners\Barrier.png">

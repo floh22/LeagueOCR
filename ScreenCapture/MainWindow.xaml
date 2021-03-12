@@ -31,7 +31,7 @@
         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:local="clr-namespace:LoLOCRHub"
         mc:Ignorable="d"
-        Title="LeagueOCR" MinHeight="450" MinWidth="800" SizeToContent="WidthAndHeight" WindowStartupLocation="CenterScreen" ResizeMode="CanMinimize"
+        Title="LeagueOCR" MinHeight="450" MinWidth="200" SizeToContent="WidthAndHeight" WindowStartupLocation="CenterScreen" ResizeMode="CanMinimize"
         Loaded="Window_Loaded"
         Closing="Window_Closing" >
     <Grid>
@@ -46,9 +46,9 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <StackPanel Margin="10">
-                <ToggleButton x:Name="ShowPreviewButton" Content="Show Preview" Checked="ShowPreviewButton_Checked" Unchecked="ShowPreviewButton_Unchecked" Margin="10" IsChecked="True"/>
+                <ToggleButton x:Name="ShowPreviewButton" Content="Show Preview" Checked="ShowPreviewButton_Checked" Unchecked="ShowPreviewButton_Unchecked" Margin="10" IsChecked="False"/>
                 <ToggleButton x:Name="ESportsTimerButton" Content="Use eSports Timer" Checked="ESportsTimerButton_Checked" Unchecked="ESportsTimerButton_Unchecked" Margin="10" IsChecked="True"/>
-                <ToggleButton x:Name="IncreaseGoldButton" Content="Allow time skipping" Checked="IncreaseGold_Checked" Unchecked="IncreaseGold_Unchecked" Margin="10" />
+                <ToggleButton x:Name="IncreaseGoldButton" Content="Allow time skipping" Checked="AllowSkip" Unchecked="DisableSkip" Margin="10" IsChecked="True" />
                 <TextBlock Text="Dragon Count" Margin="10,10,10,-18"/>
                 <xctk:IntegerUpDown x:Name="drakeCount" Value="0" AllowTextInput="false" Margin="10,0,10,-10" ValueChanged="drakeCount_ValueChanged" HorizontalAlignment="Right"/>
                 <TextBlock Text="Baron Count" Margin="10,20,10,-18"/>

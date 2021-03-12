@@ -22,7 +22,11 @@ namespace Server
         public static Team redTeam = new Team(1, "CHAOS", 2500);
 
         public static Objective baron = new Objective("Baron", 1800, false);
+        public static string previousBaron;
+
         public static Objective dragon = new Objective("Dragon", 300, false);
+        public static string previousDragon;
+        
         public static List<DragonType> oldTypes;
 
         public static List<List<int>> oldValues;
@@ -40,12 +44,11 @@ namespace Server
             oldValues.Add(new List<int>());
             //dragon Timer
             oldValues.Add(new List<int>());
-            dragon.IsAlive = false;
             //baron Timer
             oldValues.Add(new List<int>());
-            baron.IsAlive = false;
 
             oldTypes = new List<DragonType>();
+
         }
 
         public void StartServer()
@@ -55,6 +58,9 @@ namespace Server
             //Init objective values
             dragon.Cooldown = int.MaxValue;
             baron.Cooldown = int.MaxValue;
+
+            previousBaron = "04:58";
+            previousDragon = "04:58";
         }
 
         public void StopServer()
@@ -62,8 +68,12 @@ namespace Server
             Console.WriteLine("Shutting Down Server");
 
             //Reset state data
-            baron.TimesTakenInMatch = -1;
-            dragon.TimesTakenInMatch = -1;
+            baron = new Objective("Baron", 1800, false);
+            dragon = new Objective("Dragon", 300, false);
+
+            blueTeam = new Team(0, "ORDER", 2500);
+            redTeam = new Team(1, "CHAOS", 2500);
+
             oldTypes.Clear();
             oldValues.ForEach((vList) => vList.Clear());
 

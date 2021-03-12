@@ -11,24 +11,40 @@ namespace Common
         public static AreaOfInterest Dragon_Type;
         public static AreaOfInterest Baron_Timer;
 
+        public static AreaOfInterest BaronTeam;
+        public static AreaOfInterest DragonTeam;
+
 
         public static void DisposeAll()
         {
             GetOCRAreaOfInterests().ForEach((aoi) => aoi.Dispose());
+            GetIMAreaOfInterests().ForEach((aoi) => aoi.Dispose());
+
+            BaronTeam.Dispose();
+            DragonTeam.Dispose();
         }
 
         public static List<AreaOfInterest> GetOCRAreaOfInterests()
         {
-            var tempList = new List<AreaOfInterest>()
+            var tempList = OCRAOIWithNull();
+            tempList.RemoveAll((item) => item == null);
+            return tempList;
+        }
+
+        public static int OCRAreaOfInterestCount()
+        {
+            return OCRAOIWithNull().Count;
+        }
+
+        private static List<AreaOfInterest> OCRAOIWithNull()
+        {
+            return new List<AreaOfInterest>()
             {
                 Red_Gold,
                 Blue_Gold,
                 Dragon_Timer,
                 Baron_Timer
             };
-
-            tempList.RemoveAll((item) => item == null);
-            return tempList;
         }
 
         public static List<AreaOfInterest> GetIMAreaOfInterests()
@@ -51,6 +67,8 @@ namespace Common
             Dragon_Timer = null;
             Dragon_Type = null;
             Baron_Timer = null;
+            BaronTeam = null;
+            DragonTeam = null;
         }
     }
 }

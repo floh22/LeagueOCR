@@ -56,6 +56,8 @@ namespace CaptureSampleCore
 
         public EventHandler<Bitmap> BitmapCreated;
 
+        public EventHandler<Bitmap> BitmapCreatedImmediate;
+
         public BasicSampleApplication(Compositor c, Size size, bool RenderPreview)
         {
             compositor = c;
@@ -112,6 +114,8 @@ namespace CaptureSampleCore
         {
             AOIList.Blue_Gold = new AreaOfInterest(757, 15, 90, 25, AOIType.BlueGold);
             AOIList.Red_Gold = new AreaOfInterest(1140, 15, 90, 25, AOIType.RedGold);
+            AOIList.BaronTeam = new AreaOfInterest(725, 230, 465, 30, AOIType.GoldText);
+            AOIList.DragonTeam = new AreaOfInterest(745, 230, 420, 30, AOIType.GoldText);
             if(useESportsTimers)
             {
                 AOIList.Dragon_Timer = new AreaOfInterest(90, 45, 50, 20, AOIType.ESportsTimer);
@@ -126,11 +130,15 @@ namespace CaptureSampleCore
 
             AOIList.GetOCRAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
             AOIList.GetIMAreaOfInterests().ForEach((aoi) => aoi.Sprite = CreateSprite(aoi));
+
+            AOIList.BaronTeam.Sprite = CreateSprite(AOIList.BaronTeam);
+            AOIList.DragonTeam.Sprite = CreateSprite(AOIList.DragonTeam);
         }
 
         public void UpdateESportsTimers()
         {
-
+            if (AOIList.Dragon_Timer == null)
+                return;
             AOIList.Dragon_Timer.Update(90, 45, 50, 20, AOIType.ESportsTimer);
             AOIList.Dragon_Type.Update(40, 35, 42, 42, AOIType.DragonType);
             AOIList.Baron_Timer.Update(1815, 45, 60, 20, AOIType.ESportsTimer);
@@ -142,6 +150,8 @@ namespace CaptureSampleCore
 
         public void UpdateNormalTimers()
         {
+            if (AOIList.Dragon_Timer == null)
+                return;
             AOIList.Dragon_Timer.Update(1860, 748, 60, 20, AOIType.NormalTimer);
             AOIList.Dragon_Type.Update(1837, 746, 25, 25, AOIType.SmallDragonType);
             AOIList.Baron_Timer.Update(1770, 748, 60, 20, AOIType.NormalTimer);
@@ -192,6 +202,12 @@ namespace CaptureSampleCore
                 aoi.Sprite.Offset = new Vector3(aoi.Rect.X * RenderScale, aoi.Rect.Y * RenderScale, 0);
             });
 
+            AOIList.BaronTeam.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
+            AOIList.BaronTeam.Sprite.Offset = new Vector3(AOIList.BaronTeam.Rect.X * RenderScale, AOIList.BaronTeam.Rect.Y * RenderScale, 0);
+
+            AOIList.DragonTeam.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
+            AOIList.DragonTeam.Sprite.Offset = new Vector3(AOIList.BaronTeam.Rect.X * RenderScale, AOIList.BaronTeam.Rect.Y * RenderScale, 0);
+
             OnUpdateContentSize(CaptureSize);
         }
 
@@ -215,6 +231,13 @@ namespace CaptureSampleCore
             {
                 aoi.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
             });
+            AOIList.GetIMAreaOfInterests().ForEach((aoi) =>
+            {
+                aoi.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
+            });
+
+            AOIList.BaronTeam.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
+            AOIList.DragonTeam.Sprite.Scale = new Vector3(RenderScale, RenderScale, 1);
 
             CaptureSize = newSize;
 
@@ -268,6 +291,11 @@ namespace CaptureSampleCore
         public void RequestCurrentBitmap()
         {
             capture.RequestBitmap = true;
+        }
+
+        public void RequestImmediateBitmap()
+        {
+            capture.RequestTwo = true;
         }
     }
 }

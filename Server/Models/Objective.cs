@@ -12,6 +12,7 @@ namespace Server.Models
         public int Cooldown;
         public bool IsAlive;
         public int TimesTakenInMatch;
+        public int LastTakenBy;
 
         public Objective(string Type, int Cooldown, bool IsAlive)
         {
@@ -19,6 +20,7 @@ namespace Server.Models
             this.Cooldown = Cooldown;
             this.IsAlive = IsAlive;
             TimesTakenInMatch = 0;
+            LastTakenBy = -1;
         }
 
         public Objective() : this("Debug", 0, false) { }

@@ -21,8 +21,11 @@ namespace OCR
             try
             {
                 _engine.DefaultPageSegMode = PageSegMode.SingleLine;
-                string unfilteredOut = _engine.Process(bitmap, new Rect(subRegion.X, subRegion.Y, subRegion.Width, subRegion.Height)).GetText();
+                var page = _engine.Process(bitmap, new Rect(subRegion.X, subRegion.Y, subRegion.Width, subRegion.Height));
+                string unfilteredOut = page.GetText();
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "");
+                page.Dispose();
+                bitmap.Dispose();
                 return cleaned;
             }
             catch (Exception e)
@@ -44,8 +47,12 @@ namespace OCR
             try
             {
                 _engine.DefaultPageSegMode = PageSegMode.SingleBlock;
-                string unfilteredOut = _engine.Process(bitmap).GetText();
+                var page = _engine.Process(bitmap);
+                string unfilteredOut = page.GetText();
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(",", ".").Replace("S", "5").Replace("B", "8");
+
+                page.Dispose();
+                bitmap.Dispose();
                 return cleaned;
             }
             catch (Exception e)
@@ -67,8 +74,36 @@ namespace OCR
             try
             {
                 _engine.DefaultPageSegMode = PageSegMode.SingleBlock;
-                string unfilteredOut = _engine.Process(bitmap).GetText();
+                var page = _engine.Process(bitmap);
+                string unfilteredOut = page.GetText();
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(";", ":").Replace("S", "5").Replace("B", "8");
+                page.Dispose();
+                bitmap.Dispose();
+                return cleaned;
+            }
+            catch (Exception e)
+            {
+                Trace.TraceError(e.ToString());
+                Console.WriteLine("Unexpected Error: " + e.Message);
+                Console.WriteLine("Details: ");
+                Console.WriteLine(e.ToString());
+                return "";
+            }
+        }
+
+        public string GetTeamInBitmap(System.Drawing.Bitmap bitmap)
+        {
+            //Reduced set of letters to hopefully help Tesseract filter some false positives
+            _engine.SetVariable("tessedit_char_whitelist", "8BRuedl1IhsiNnmtaDrgo0O! ");
+
+            try
+            {
+                _engine.DefaultPageSegMode = PageSegMode.SingleBlock;
+                var page = _engine.Process(bitmap);
+                string unfilteredOut = page.GetText();
+                string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace("I", "l").Replace("1", "l").Replace("8", "B").Replace("0", "o").Replace("O", "o").Replace("!", "");
+                page.Dispose();
+                bitmap.Dispose();
                 return cleaned;
             }
             catch (Exception e)

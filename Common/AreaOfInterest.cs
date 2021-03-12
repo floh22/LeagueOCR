@@ -44,6 +44,7 @@ namespace Common
         ESportsTimer,
         DragonType,
         SmallDragonType,
-        NormalTimer
+        NormalTimer,
+        GoldText
     }
 }

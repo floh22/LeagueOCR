@@ -51,6 +51,7 @@ namespace CaptureSampleCore
 
         private bool newWindow = true;
         public bool RequestBitmap = false;
+        public bool RequestTwo = false;
 
         public BasicCapture(IDirect3DDevice d, GraphicsCaptureItem i, BasicSampleApplication a)
         {
@@ -142,10 +143,19 @@ namespace CaptureSampleCore
                 }
                 if (RequestBitmap)
                 {
+                    
                     RequestBitmap = false;
                     var tempBitmap = new System.Drawing.Bitmap(bitmap.Description.Width, bitmap.Description.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                     BitmapFromTexture(tempBitmap, bitmap);
                     appWindow.BitmapCreated(this, tempBitmap);
+                }
+
+                if(RequestTwo)
+                {
+                    RequestTwo = false;
+                    var tempBitmap = new System.Drawing.Bitmap(bitmap.Description.Width, bitmap.Description.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    BitmapFromTexture(tempBitmap, bitmap);
+                    appWindow.BitmapCreatedImmediate(this, tempBitmap);
                 }
 
 

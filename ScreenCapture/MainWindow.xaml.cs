@@ -33,17 +33,16 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Configuration;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
 using System.Numerics;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Windows.Foundation.Metadata;
@@ -67,23 +66,49 @@ namespace LoLOCRHub
         private ContainerVisual root;
 
         DispatcherTimer findLoLTimer;
-        System.Timers.Timer OCRTimer;
         private double OCRInterval = 1000;
+        public long lastRequested;
 
         public static BasicSampleApplication sample;
         public static DataManager dataManager;
         private Server.HttpServer HttpServer;
+        private List<OCREngine> engines;
 
         private System.Drawing.Size actualSize;
         private double dpiX = 1.0;
         private double dpiY = 1.0;
 
-        private bool finishedInit = false;
-        public static bool saveNextFrame = false;
-        public static bool showPreview = true;
+        private bool finishedInit;
+        public static bool saveNextFrame;
+        public static bool showPreview;
         public static string saveName;
 
+        private static EventHandler<FinishOCREventArgs> OCRFinished;
+
         private bool doIM;
+
+        private struct ObjectiveRequest
+        {
+            public AreaOfInterest aoi;
+            public Server.Models.Objective o;
+
+            public ObjectiveRequest(AreaOfInterest aoi, Server.Models.Objective o)
+            {
+                this.aoi = aoi;
+                this.o = o;
+            }
+        }
+        //Not a nice solution but it'll have to do for now
+        private Dictionary<ObjectiveRequest, int> currentObjectiveRequests = new Dictionary<ObjectiveRequest, int>();
+
+        private enum PerformanceLevel
+        {
+            Low = 1,
+            Medium = 5,
+            High = 15
+        }
+
+        private PerformanceLevel perfLevel;
 
         public MainWindow()
         {
@@ -106,9 +131,12 @@ namespace LoLOCRHub
             }
             var controlsWidth = (float)(ControlsGrid.ActualWidth * dpiX);
 
-            //actualSize = new System.Drawing.Size((int)((MainWindow.ActualWidth - 200) * dpiX), (int)(MainWindow.ActualHeight * dpiY);
-            actualSize = new System.Drawing.Size((int)Main.ActualWidth - 200, (int)Main.ActualHeight);
-
+            if(ShowPreviewButton.IsChecked.Value)
+            {
+                //actualSize = new System.Drawing.Size((int)((MainWindow.ActualWidth - 200) * dpiX), (int)(MainWindow.ActualHeight * dpiY);
+                actualSize = new System.Drawing.Size((int)Main.ActualWidth - 200, (int)Main.ActualHeight);
+                showPreview = true;
+            }
             dataManager = new DataManager();
 
             InitComposition(controlsWidth);
@@ -163,12 +191,14 @@ namespace LoLOCRHub
 
         private void ResetWindowSize(object sender, EventArgs e)
         {
-            //Update Window
-            Main.MaxWidth = 800;
-            Main.MinWidth = 800;
-            Main.MaxHeight = 450;
-            Main.MinHeight = 450;
-
+            if(showPreview)
+            {
+                //Update Window
+                Main.MaxWidth = 800;
+                Main.MinWidth = 800;
+                Main.MaxHeight = 450;
+                Main.MinHeight = 450;
+            }
             StopCapture();
         }
 
@@ -203,9 +233,25 @@ namespace LoLOCRHub
 
             HttpServer = new HttpServer(3002);
 
-            sample.BitmapCreated += FindValuesInLoL;
+            //by default only linear behavior
+            HttpServer.OnlyIncreaseGold = false;
+
+            sample.BitmapCreated += FindValues;
 
             FindLoLProcess(this, EventArgs.Empty);
+
+            perfLevel = (PerformanceLevel)Enum.Parse(typeof(PerformanceLevel), ConfigurationManager.AppSettings["PerformanceLevel"].ToString(), true);
+
+            engines = new List<OCREngine>();
+            for (int i = 0; i < AOIList.OCRAreaOfInterestCount() + 1; i++)
+            {
+                engines.Add(new OCREngine());
+            }
+
+            Console.WriteLine("Started " + engines.Count + " OCR Engine Instances");
+
+            OCRFinished += OCRThreadsFinished;
+            sample.BitmapCreatedImmediate += GetTeamForObjectiveLate;
         }
 
         private void StartHwndCapture(IntPtr hwnd, string pName)
@@ -215,12 +261,13 @@ namespace LoLOCRHub
             {
                 sample.StartCaptureFromItem(item);
 
-                if (pName.Equals("League of Legends (TM) Client")) {
+                if (pName.Equals("League of Legends (TM) Client"))
+                {
                     //Capturing League. Start OCR and Data Server
                     sample.CapturingLeagueOfLegends(ESportsTimerButton.IsChecked.Value);
 
                     //Starting doing OCR on the scene since we now know where to look for what
-                    OCRTimer.Enabled = true;
+                    CustomTimer.Instance.Start();
 
                     //Make sure to get dragon Types on startup
                     doIM = true;
@@ -232,6 +279,7 @@ namespace LoLOCRHub
 
             findLoLTimer.Stop();
             finishedInit = true;
+            lastRequested = DateTime.Now.Ticks;
         }
 
         private void StopCapture()
@@ -240,9 +288,12 @@ namespace LoLOCRHub
             if (sample.CapturingLoL)
             {
                 //Was capturing league. Stop OCR and Data Server
-                OCRTimer.Enabled = false;
+                CustomTimer.Instance.Stop();
                 HttpServer.StopServer();
                 sample.CapturingLoL = false;
+                drakeCount.Value = 0;
+                baronCount.Value = 0;
+                AOIList.DisposeAll();
             }
             sample.StopCapture();
             if (!findLoLTimer.IsEnabled)
@@ -271,7 +322,7 @@ namespace LoLOCRHub
             }
         }
 
-        private void FindValuesInLoL(object sender, Bitmap bitmap)
+        private void FindValues(object sender, Bitmap bitmap)
         {
             //Hardcode upscale factor for now since this shouldn't get changed by users in UI
             //TODO Config file
@@ -280,50 +331,85 @@ namespace LoLOCRHub
             drakeCount.Value = HttpServer.dragon.TimesTakenInMatch;
             baronCount.Value = HttpServer.baron.TimesTakenInMatch;
 
-            if(doIM)
+            if (doIM && HttpServer.dragon.Cooldown != int.MaxValue)
             {
                 doIM = false;
                 if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
                     doIM = true;
             }
 
-            OCRThread ocrT = new OCRThread(bitmap, upscalingFactor, new OCRCallback((time) => {
-                //If OCR takes longer than the timer interval, slow down OCR
-                //Conversely, if OCR is far faster than the interval, speed up to 1x second
-                if(time >= (long) OCRInterval)
+            //If set to low, perform OCR consecutively, otherwise use thread pooling to greatly speed up OCR
+
+            //FindValuesThreaded(bitmap, upscalingFactor);
+            FindValuesThreadPool(bitmap, upscalingFactor);
+        }
+
+        private void FindValuesThreadPool(Bitmap bitmap, float upscalingFactor) {
+            var time = DateTime.Now.Ticks;
+
+            //Crop bitmap sequentially since Graphics cannot be accessed in parallel
+            //Store results in a Dictionary to do OCR afterwards
+            var bmpDict = new Dictionary<AreaOfInterest, Bitmap>();
+            var task = Task.Run(() => {
+                AOIList.GetOCRAreaOfInterests().ForEach(aoi =>
                 {
-                    OCRInterval += 1000 * Math.Floor((double)(time / OCRInterval));
-                    OCRTimer.Interval = OCRInterval;
-                } else if ( OCRInterval > 1000 && (long) OCRInterval > time * 2)
+                    bmpDict.Add(aoi, OCR.Utils.ApplyUpscale(upscalingFactor, (Bitmap)bitmap.Clone(aoi.Rect, bitmap.PixelFormat)));
+                });
+            });
+            task.Wait();
+
+            var threadCount = bmpDict.Count;
+            //Track total Threads in Pool
+            var list = new List<int>(threadCount);
+            for (var i = 0; i < threadCount; i++) list.Add(i);
+
+            using (var countdownEvent = new CountdownEvent(threadCount))
+            {
+                for (var i = 0; i < threadCount; i++)
                 {
-                    OCRInterval = Math.Max(OCRInterval / 2, 1000);
-                    OCRTimer.Interval = OCRInterval;
+                    var singleOCR = new SingleOCRThread(bmpDict.ElementAt(i), upscalingFactor, engines.ElementAt(i), i);
+
+                    ThreadPool.QueueUserWorkItem(x =>
+                    {
+                        singleOCR.Process();
+                        countdownEvent.Signal();
+                    }, list[i]);
+
                 }
 
-                var oldDragonIsAlive = HttpServer.dragon.IsAlive;
-                var oldBaronIsAlive = HttpServer.baron.IsAlive;
-                HttpServer.UpdateNeutralTimers();
-                if(!HttpServer.dragon.IsAlive && oldDragonIsAlive)
-                {
-                    Console.WriteLine("Dragon Killed");
-                    HttpServer.oldTypes.Add((DragonType)Enum.Parse(typeof(DragonType), HttpServer.dragon.Type));
-                    HttpServer.dragon.TimesTakenInMatch++;
-                    if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
-                        doIM = true;
-                }
-                if(!HttpServer.baron.IsAlive && oldBaronIsAlive)
-                {
-                    HttpServer.baron.TimesTakenInMatch++;
-                }
-                HttpServer.UpdateTeams();
+                //Wait for OCR to finish
+                countdownEvent.Wait();
+            }
+
+            OCRFinished.Invoke(this, new FinishOCREventArgs(bitmap, DateTime.Now.Ticks - time));
+        }
+
+        private void OCRThreadsFinished(object sender, FinishOCREventArgs e)
+        {
+
+            TimeSpan elapsedSpan = new TimeSpan(e.OCRDuration);
+            //Console.WriteLine("OCR in: " + elapsedSpan.TotalMilliseconds + "ms");
+
+            PostOCR(e.bmp, (long)elapsedSpan.TotalMilliseconds);
+
+            if (MainWindow.saveNextFrame)
+                MainWindow.saveNextFrame = false;
+
+        }
+
+
+        [ObsoleteAttribute("This method does all OCR on a single Thread. Use FindValuesThreadPool instead.")]
+        private void FindValuesThreaded(Bitmap bitmap, float upscalingFactor)
+        {
+            var timeStart = DateTime.Now.Ticks;
+            OCRThread ocrT = new OCRThread(bitmap, upscalingFactor, new OCRCallback((time) =>
+            {
+                TimeSpan elapsedSpan = new TimeSpan(DateTime.Now.Ticks - timeStart);
+                //Console.WriteLine("OCR in: " + elapsedSpan.TotalMilliseconds + "ms");
+                PostOCR(bitmap, time);
             }));
             Thread OCRThread = new Thread(new ThreadStart(ocrT.StartGoldOCR));
             OCRThread.Start();
-        }
-
-        private void RequestUpdatedBitmap(object sender, EventArgs e)
-        {
-            sample.RequestCurrentBitmap();
         }
 
         private bool DoDragonTypeImageMatching(Bitmap bmp, out string content)
@@ -341,6 +427,126 @@ namespace LoLOCRHub
             Console.WriteLine("Valid Dragon Type: " + content + " (" + result.confidence.ToString("0.000") + ")");
             return true;
         }
+
+        private void PostOCR(Bitmap bitmap, long time)
+        {
+            //If OCR takes longer than the timer interval, slow down OCR
+            //Conversely, if OCR is far faster than the interval, speed up to 1x second
+
+            if (time >= (long)OCRInterval)
+            {
+                OCRInterval += 1000 * Math.Floor((double)(time / OCRInterval));
+                CustomTimer.Instance.SetInterval((int)OCRInterval);
+            }
+            else if (OCRInterval > 1000 && (long)OCRInterval > time * 2)
+            {
+                OCRInterval = Math.Max(OCRInterval / 2, 1000);
+                CustomTimer.Instance.SetInterval((int)OCRInterval);
+            }
+
+            var oldDragonIsAlive = HttpServer.dragon.IsAlive;
+            var oldBaronIsAlive = HttpServer.baron.IsAlive;
+            HttpServer.UpdateNeutralTimers();
+            if (!(HttpServer.dragon.Cooldown == 0) && oldDragonIsAlive)
+            {
+                HttpServer.oldTypes.Add((DragonType)Enum.Parse(typeof(DragonType), HttpServer.dragon.Type));
+                HttpServer.dragon.TimesTakenInMatch++;
+                GetTeamInAreaOfInterest(HttpServer.dragon, AOIList.DragonTeam, bitmap);
+                if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
+                    doIM = true;
+            }
+            if (!(HttpServer.baron.Cooldown == 0) && oldBaronIsAlive)
+            {
+                HttpServer.baron.TimesTakenInMatch++;
+                GetTeamInAreaOfInterest(HttpServer.baron, AOIList.BaronTeam, bitmap);
+            }
+            HttpServer.UpdateTeams();
+        }
+
+        private void GetTeamInAreaOfInterest(Server.Models.Objective o, AreaOfInterest aoi, Bitmap bmp)
+        {
+            var outMap = OCR.Utils.ApplyCrop(bmp, aoi.Rect);
+            var task = Task.Run(() => { var found = GetTeamForObjective(o, aoi, outMap, 0); if (found) Console.WriteLine("Found objective killing team"); });
+        }
+
+        private bool GetTeamForObjective(Server.Models.Objective o, AreaOfInterest aoi, Bitmap regionBitmap, int i)
+        {
+            if (i >= 10)
+            {
+                //Tried too often to determine team! Stop now and let the user manually override
+                o.LastTakenBy = -1;
+                o.IsAlive = false;
+                return false;
+            }
+
+            var searchString = o.Type == "Baron" ? "Baron" : "Dragon";
+            var engine = engines.ElementAt(engines.Count - 1);
+            var team = engine.GetTeamInBitmap(regionBitmap);
+
+            if (team.Length != 0 && team.Contains(searchString))
+            {
+                if (team.Contains("Bl") || team.Contains("ue") || team.Contains("Bu"))
+                {
+                    o.LastTakenBy = 0;
+                    o.IsAlive = false;
+                    return true;
+                }
+                else if (team.Contains("Re") || team.Contains("ed") || team.Contains("Rd"))
+                {
+                    o.LastTakenBy = 1;
+                    o.IsAlive = false;
+                    return true;
+                }
+
+                Console.WriteLine("Found Objective but not Team! Considering Objective dead but not setting killer!");
+                o.LastTakenBy = -1;
+                o.IsAlive = false;
+            }
+
+            Thread.Sleep(TimeSpan.FromMilliseconds(200));
+            ScheduleImmediateBitmap(new ObjectiveRequest(aoi, o), ++i);
+            return false;
+        }
+
+        private void ScheduleImmediateBitmap(ObjectiveRequest objectiveRequest, int i)
+        {
+            Console.WriteLine("Could not determine team for objective.");
+            currentObjectiveRequests.Add(objectiveRequest, i);
+            sample.RequestImmediateBitmap();
+        }
+
+        private void GetTeamForObjectiveLate(object sender, Bitmap bmp)
+        {
+            if (currentObjectiveRequests.Count > 2)
+            {
+                Console.WriteLine("Something went very wrong! Trying to map more teams to objects than there are objectives!");
+            }
+            if (currentObjectiveRequests.Count == 0)
+                return;
+
+            List<Bitmap> bmps = new List<Bitmap>();
+            for (int i = 0; i < currentObjectiveRequests.Count; i++)
+            {
+                bmps.Add(OCR.Utils.ApplyCrop(bmp, currentObjectiveRequests.ElementAt(i).Key.aoi.Rect));
+
+            }
+
+            _ = Task.Run(() =>
+            {
+                for (int i = 0; i < currentObjectiveRequests.Count; i++)
+                {
+                    var pair = currentObjectiveRequests.ElementAt(i);
+                    Console.WriteLine(pair.Value + " attempts to determine this objective team");
+                    var aoi = pair.Key.aoi;
+                    var o = pair.Key.o;
+                    currentObjectiveRequests.Remove(pair.Key);
+                    var found = GetTeamForObjective(o, aoi, bmps.ElementAt(i), pair.Value);
+                    if (found)
+                        Console.WriteLine("Found objective killing team");
+                }
+            });
+        }
+
 
         private bool IsValidDragon(DragonTypeResult result)
         {
@@ -402,15 +608,15 @@ namespace LoLOCRHub
             sample.UpdateNormalTimers();
         }
 
-        private void IncreaseGold_Checked(object sender, RoutedEventArgs e)
+        private void DisableSkip(object sender, RoutedEventArgs e)
         {
             HttpServer.OnlyIncreaseGold = true;
             HttpServer.oldValues.ForEach((l) => l.Clear());
         }
 
-        private void IncreaseGold_Unchecked(object sender, RoutedEventArgs e)
+        private void AllowSkip(object sender, RoutedEventArgs e)
         {
-            HttpServer.OnlyIncreaseGold = true;
+            HttpServer.OnlyIncreaseGold = false;
         }
 
         private void SaveImage_Click(object sender, RoutedEventArgs e)
@@ -433,10 +639,13 @@ namespace LoLOCRHub
             HttpServer.baron.TimesTakenInMatch = baronCount.Value.Value;
         }
 
-
         //Timer Init
         private void StartTimers()
         {
+            Debug.WriteLine("Starting Timers");
+            if (findLoLTimer != null)
+                return;
+
             findLoLTimer = new DispatcherTimer()
             {
                 Interval = TimeSpan.FromSeconds(5)
@@ -444,12 +653,10 @@ namespace LoLOCRHub
             findLoLTimer.Tick += FindLoLProcess;
             findLoLTimer.Start();
 
-            OCRTimer = new System.Timers.Timer
-            {
-                Interval = 1000
-            };
-            OCRTimer.Elapsed += RequestUpdatedBitmap;
+            CustomTimer.Instance.SetInterval((int)OCRInterval);
+            CustomTimer.Instance.AddDelegate(() => { sample.RequestCurrentBitmap(); });
         }
+
     }
 
     public delegate void OCRCallback(long OCRDuration);
@@ -503,7 +710,7 @@ namespace LoLOCRHub
 
                 if (MainWindow.saveNextFrame)
                     regionBitmap.Save(MainWindow.saveName + nameof(aoi) + ".png", ImageFormat.Png);
-             
+
             });
             if (MainWindow.saveNextFrame)
                 MainWindow.saveNextFrame = false;
@@ -513,14 +720,82 @@ namespace LoLOCRHub
 
         private string DoGoldOCR(Bitmap bmp)
         {
-            var engine = new OCREngine();
+            return new OCREngine().GetGoldInBitmap(bmp);
+        }
+
+        private string DoTimeOCR(Bitmap bmp)
+        {
+            return new OCREngine().GetTimeInBitmap(bmp);
+        }
+    }
+
+    public class SingleOCRThread
+    {
+        private readonly float upscaleFactor;
+        private KeyValuePair<AreaOfInterest, Bitmap> area;
+        private OCREngine engine;
+        private int threadID;
+
+        public SingleOCRThread(KeyValuePair<AreaOfInterest, Bitmap> area, float upscaleFactor, OCREngine engine, int threadID)
+        {
+            this.area = area;
+            this.upscaleFactor = upscaleFactor;
+            this.threadID = threadID;
+            this.engine = engine;
+        }
+
+        public void Process()
+        {
+            //this.engine = new OCREngine();
+            //Do Color Processing to make text clearer
+            switch (area.Key.type)
+            {
+                case Common.AOIType.BlueGold:
+                    OCR.Utils.BlueTextColorPass(area.Value);
+                    area.Key.CurrentContent = DoGoldOCR(area.Value);
+                    break;
+                case Common.AOIType.RedGold:
+                    //OCR.Utils.RedTextColorPass(regionBmp);
+                    OCR.Utils.ApplyBrightnessColorMask(area.Value);
+                    area.Key.CurrentContent = DoGoldOCR(area.Value);
+                    break;
+                case Common.AOIType.ESportsTimer:
+                    OCR.Utils.ApplyBrightnessColorMask(area.Value);
+                    area.Key.CurrentContent = DoTimeOCR(area.Value);
+                    break;
+                case Common.AOIType.NormalTimer:
+                    OCR.Utils.ApplyBrightnessColorMask(area.Value);
+                    area.Key.CurrentContent = DoTimeOCR(area.Value);
+                    break;
+            }
+
+            if (MainWindow.saveNextFrame)
+                area.Value.Save(MainWindow.saveName + nameof(area.Key) + ".png", ImageFormat.Png);
+
+            //OCRCallbackAggregation.FinishThread(threadID);
+
+        }
+
+        private string DoGoldOCR(Bitmap bmp)
+        {
             return engine.GetGoldInBitmap(bmp);
         }
 
         private string DoTimeOCR(Bitmap bmp)
         {
-            var engine = new OCREngine();
             return engine.GetTimeInBitmap(bmp);
+        }
+    }
+
+    class FinishOCREventArgs
+    {
+        public long OCRDuration;
+        public Bitmap bmp;
+
+        public FinishOCREventArgs(Bitmap bmp, long OCRDuration)
+        {
+            this.bmp = bmp;
+            this.OCRDuration = OCRDuration;
         }
     }
 }

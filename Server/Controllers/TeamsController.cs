@@ -1,9 +1,9 @@
 ﻿using Common;
 using Server.Models;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Web.Http;
 
 namespace Server.Controllers
@@ -11,26 +11,26 @@ namespace Server.Controllers
     public class TeamsController : ApiController
     {
 
-        public IEnumerable<Team> GetAllTeams()
+        public HttpResponseMessage GetAllTeams()
         {
-            return new Team[] { HttpServer.blueTeam, HttpServer.redTeam };
+            return Request.CreateResponse(HttpStatusCode.OK, new Team[] { HttpServer.blueTeam, HttpServer.redTeam }, Configuration.Formatters.JsonFormatter);
         }
 
-        public IHttpActionResult GetTeam(int id)
+        public HttpResponseMessage GetTeam(int id)
         {
             if (id < 0 || id > 1)
-                return NotFound();
+                return Request.CreateResponse(HttpStatusCode.BadRequest);
 
-            return (id == 0) ? Ok(HttpServer.blueTeam) : Ok(HttpServer.redTeam);
+            return (id == 0) ? Request.CreateResponse(HttpStatusCode.OK, HttpServer.blueTeam, Configuration.Formatters.JsonFormatter) : Request.CreateResponse(HttpStatusCode.OK, HttpServer.redTeam, Configuration.Formatters.JsonFormatter);
         }
 
-        public IHttpActionResult GetTeam(string name)
+        public HttpResponseMessage GetTeam(string name)
         {
             if (name.Equals("ORDER", StringComparison.OrdinalIgnoreCase))
-                return Ok(HttpServer.blueTeam);
+                return Request.CreateResponse(HttpStatusCode.OK, HttpServer.blueTeam, Configuration.Formatters.JsonFormatter);
             else if (name.Equals("CHAOS", StringComparison.OrdinalIgnoreCase))
-                return Ok(HttpServer.redTeam);
-            return NotFound();
+                return Request.CreateResponse(HttpStatusCode.OK, HttpServer.redTeam, Configuration.Formatters.JsonFormatter);
+            return Request.CreateResponse(HttpStatusCode.BadRequest);
         }
 
         public static void UpdateTeams()
@@ -112,7 +112,7 @@ namespace Server.Controllers
                 else
                 {
                     var oldList = HttpServer.oldValues.ElementAt(listPos);
-                    if (oldList.Count > 3)
+                    if (oldList.Count >= 3)
                         oldList.RemoveAt(0);
                     if (oldList.Count != 0)
                     {

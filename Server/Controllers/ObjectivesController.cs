@@ -3,6 +3,8 @@ using Server.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
@@ -12,29 +14,29 @@ namespace Server.Controllers
     public class ObjectivesController : ApiController
     {
 
-        public IEnumerable<Objective> GetAllObjectives()
+        public HttpResponseMessage GetAllObjectives()
         {
-            return new List<Objective>()
+            return Request.CreateResponse(HttpStatusCode.OK, new List<Objective>()
             {
                 HttpServer.dragon,
                 HttpServer.baron
-            };
+            }, Configuration.Formatters.JsonFormatter);
         }
 
-        public IHttpActionResult GetObjective(string Name)
+        public HttpResponseMessage GetObjective(string Name)
         {
-            if (Name.Equals("Dragon", StringComparison.CurrentCultureIgnoreCase))
-                return Ok(HttpServer.dragon);
-            if (Name.Equals("Baron", StringComparison.CurrentCultureIgnoreCase))
-                return Ok(HttpServer.baron);
-            return NotFound();
+            if (Name.Equals("Dragon", StringComparison.OrdinalIgnoreCase))
+                return Request.CreateResponse(HttpStatusCode.OK, HttpServer.dragon, Configuration.Formatters.JsonFormatter);
+            if (Name.Equals("Baron", StringComparison.OrdinalIgnoreCase))
+                return Request.CreateResponse(HttpStatusCode.OK, HttpServer.baron, Configuration.Formatters.JsonFormatter);
+            return Request.CreateResponse(HttpStatusCode.BadRequest);
         }
 
         public static void UpdateObjectives()
         {
             HttpServer.dragon.Type = AOIList.Dragon_Type.CurrentContent;
             var dragonRespawnTimer = HttpServer.dragon.Type == "Elder" ? 360 : 300;
-            if (TextToTime(AOIList.Dragon_Timer.CurrentContent, HttpServer.dragon.Cooldown, dragonRespawnTimer, 2, out int dragonCd))
+            if (TextToTime(AOIList.Dragon_Timer.CurrentContent, HttpServer.dragon.Cooldown, ref HttpServer.previousDragon, dragonRespawnTimer, 2, out int dragonCd))
             {
                 HttpServer.dragon.Cooldown = dragonCd;
 
@@ -44,7 +46,7 @@ namespace Server.Controllers
                 else if (HttpServer.dragon.IsAlive == true)
                     HttpServer.dragon.IsAlive = false;
             }
-            if (TextToTime(AOIList.Baron_Timer.CurrentContent, HttpServer.baron.Cooldown, HttpServer.baron.TimesTakenInMatch == 0 ? 1800 : 360, 3, out int baronCd))
+            if (TextToTime(AOIList.Baron_Timer.CurrentContent, HttpServer.baron.Cooldown, ref HttpServer.previousBaron, HttpServer.baron.TimesTakenInMatch == 0 ? 1800 : 360, 3, out int baronCd))
             {
                 HttpServer.baron.Cooldown = baronCd;
 
@@ -56,7 +58,7 @@ namespace Server.Controllers
             }
         }
 
-        private static bool TextToTime(string inputText, int oldTime, int maxTime, int listPos, out int newTime)
+        private static bool TextToTime(string inputText, int oldTime, ref string oldText, int maxTime, int listPos, out int newTime)
         {
             //Try to determine and clean up what OCR creates. It's better to not update a timer for a second than to have incorrect values
 
@@ -64,33 +66,41 @@ namespace Server.Controllers
             try
             {
                 //Object timers show nothing when they are off cooldown, so we have to somehow use the absence as a result
-                //This is insanely inaccurate... I just dont know how to do this better atm
-                if ((inputText.Length == 0 || inputText == "0" ) && oldTime != int.MaxValue)
+                //I thought this would be horrible...
+                //Only issue is that sometimes the fire drake icon is interpreted as a number when using the non esports timers
+                //Since OCR is very stable for this region however, treat it the same as no input at all
+                
+                if ((inputText.Length <= 1 || inputText == "0" ) && oldTime != int.MaxValue)
                 {
 
                     //If we only accept linear progression in time, then if recently the timer was about to go to 0, absence of results are expected and set the timer to 0
                     if (HttpServer.OnlyIncreaseGold && oldTime < 5)
                     {
-                        newTime = 0;
+                        Console.WriteLine("Detected Objective Respawn");
                         return true;
                     }
                     else
                     {
                         var oldList = HttpServer.oldValues.ElementAt(listPos);
-                        if (oldList.Count > 3)
+                        if (oldList.Count > 2)
                             oldList.RemoveAt(0);
                         if (oldList.Count != 0)
                         {
                             var avg = oldList.Sum() / oldList.Count;
-                            if (Math.Abs(avg) > 10)
+                            if (Math.Abs(avg) > 5)
                             {
                                 oldList.Add(0);
                                 return false;
                             }
                         }
-                        oldList.Add(0);
+                        if(oldTime != 0)
+                        {
+                            Console.WriteLine("Detected Objective Respawn");
+                            oldList.Add(0);
 
-                        return true;
+                            return true;
+                        }
+                        return false;
                     }
                 }
                 else if (inputText.Length >= 3 && inputText.Length < 6)
@@ -126,6 +136,31 @@ namespace Server.Controllers
                         return false;
                     }
 
+                    //Fix up the number obtained a bit in a couple common cases of OCR confusion
+                    //Assumes 1 tick/sec
+
+                    //OCR likes to confuse 2 with 9, so try to help out here.
+                    if(oldText.ElementAt(oldText.Length - 1) == '3' && inputText.ElementAt(inputText.Length - 1) == '9')
+                    {
+                        Console.WriteLine("Fixing OCR input string: 9 -> 2");
+                        inputText = inputText.Remove(inputText.Length - 1, 1) + "2";
+                    }
+
+                    //OCR also rarely confuses 9 with 0, so to avoid this try to catch these cases.
+                    //Caution here though since if the game were paused at a multiple of 10, this should not be replaced
+                    if(oldText.ElementAt(oldText.Length - 1) == '0' && inputText.ElementAt(inputText.Length - 1) == '0' && (oldText.ElementAt(oldText.Length - 2) != inputText.ElementAt(inputText.Length - 2)))
+                    {
+                        Console.WriteLine("Fixing OCR input string: 0 -> 9");
+                        inputText = inputText.Remove(inputText.Length - 1, 1) + "9";
+                    }
+
+                    //90 seconds not possible. Since this most likely a simple OCR confusion between 9 and 2, replace it
+                    if(inputText.ElementAt(inputText.Length - 2) == '9')
+                    {
+                        Console.WriteLine("Fixing OCR input string: 9 -> 2");
+                        inputText = inputText.Remove(3, 1).Insert(3, "2");
+                    }
+
                     //Text should be somewhat formatted now
 
                     string[] parts = inputText.Split(':');
@@ -146,6 +181,7 @@ namespace Server.Controllers
                         if ((timeInSeconds > oldTime && Math.Abs(timeInSeconds - maxTime) < 10) || timeInSeconds < oldTime)
                         {
                             newTime = timeInSeconds;
+                            oldText = inputText;
                             return true;
                         }
 
@@ -160,8 +196,12 @@ namespace Server.Controllers
                         if (oldList.Count != 0)
                         {
                             var avg = oldList.Sum() / oldList.Count;
+
+                            //React quickly incase the objective just respawned so we can catch the message
                             //Assume that we check once per second with a bit of room for missed OCR passes
-                            if (Math.Abs((avg - 3) - timeInSeconds) > 10)
+                            if(avg < 5 && timeInSeconds < maxTime + 10 && timeInSeconds > maxTime - 10) {
+                                Console.WriteLine("Detected Objective Killed");
+                            } else if (Math.Abs((avg - 3) - timeInSeconds) > 5 )
                             {
                                 oldList.Add(timeInSeconds);
                                 return false;
@@ -169,8 +209,8 @@ namespace Server.Controllers
                         }
                         oldList.Add(timeInSeconds);
                     }
-
                     //New time most likely correct
+                    oldText = inputText;
                     newTime = timeInSeconds;
 
                 }

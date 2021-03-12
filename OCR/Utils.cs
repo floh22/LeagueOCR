@@ -80,7 +80,7 @@ namespace OCR
                 for (int x = 0; x < bitmapdata.Width; x++)
                 {
                     var xPixelSize = x * PixelSize;
-                    byte pixelValue = (destPixels[xPixelSize] == 0) ? 255 : 0;
+                    byte pixelValue = (destPixels[xPixelSize] == 0)? (byte)255 : (byte)0;
                     destPixels[xPixelSize] = pixelValue;         // B
                     destPixels[xPixelSize + 1] = pixelValue; // G
                     destPixels[xPixelSize + 2] = pixelValue; // R
@@ -101,9 +101,9 @@ namespace OCR
                 for (int x = 0; x < bitmapdata.Width; x++)
                 {
                     var xPixelSize = x * PixelSize;
-                    destPixels[xPixelSize] = (destPixels[xPixelSize] == 0) ? 255 : 0;         // B
-                    destPixels[xPixelSize + 1] = (destPixels[xPixelSize + 1] == 0) ? 255 : 0; // G
-                    destPixels[xPixelSize + 2] = (destPixels[xPixelSize + 2] == 0) ? 255 : 0; // R
+                    destPixels[xPixelSize] = (destPixels[xPixelSize] == 0) ? (byte)255 : (byte)0;         // B
+                    destPixels[xPixelSize + 1] = (destPixels[xPixelSize + 1] == 0) ? (byte)255 : (byte)0; // G
+                    destPixels[xPixelSize + 2] = (destPixels[xPixelSize + 2] == 0) ? (byte)255 : (byte)0; // R
                     //destPixels[xPixelSize + 3] = pixelValue; // A
                 }
             }
@@ -144,6 +144,18 @@ namespace OCR
             }
 
             return target;
+        }
+
+        public static Bitmap ApplyCrop2(Bitmap bmp, Rectangle cropRect)
+        {
+            // Check if it is a bitmap:
+            if (bmp == null)
+                throw new ArgumentException("No valid bitmap");
+
+            // Crop the image:
+            Bitmap cropBmp = bmp.Clone(cropRect, bmp.PixelFormat);
+
+            return cropBmp;
         }
 
         public static unsafe void BlueTextColorPass(Bitmap bmp)
@@ -268,7 +280,12 @@ namespace OCR
 
         public static Bitmap ApplyUpscale(float upscaleValue, Bitmap bmp)
         {
-            return new Bitmap(bmp, new Size((int)(bmp.Width * upscaleValue), (int)(bmp.Height * upscaleValue)));
+            if (upscaleValue == 1)
+                return bmp;
+            var outBmp = new Bitmap(bmp, new Size((int)(bmp.Width * upscaleValue), (int)(bmp.Height * upscaleValue)));
+
+            bmp.Dispose();
+            return outBmp;
         }
 
         public static void ApplyUpscale(float upscaleValue, Rectangle rect)
@@ -318,6 +335,29 @@ namespace OCR
         }
 
         public static unsafe void RemoveGold(Bitmap bmp)
+        {
+            var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
+                            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            for (int y = 0; y < bitmapdata.Height; y++)
+            {
+                byte* destPixels = (byte*)bitmapdata.Scan0 + (y * bitmapdata.Stride);
+                for (int x = 0; x < bitmapdata.Width; x++)
+                {
+                    var xPixelSize = x * PixelSize;
+                    //Try to filter out only the colors of League bold gold text
+                    if (!(destPixels[xPixelSize + 2] >= 200 && destPixels[xPixelSize + 2] <= 230 && destPixels[xPixelSize + 1] >= 110 && destPixels[xPixelSize + 1] <= 160 && destPixels[xPixelSize] < 180 && destPixels[xPixelSize] >= 90))
+                    {
+                        destPixels[xPixelSize] = 0;     // B
+                        destPixels[xPixelSize + 1] = 0; // G
+                        destPixels[xPixelSize + 2] = 0; // R
+                    }
+                }
+            }
+            bmp.UnlockBits(bitmapdata);
+        }
+
+        public static unsafe void ApplyGoldMask(Bitmap bmp)
         {
             var bitmapdata = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                             System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
