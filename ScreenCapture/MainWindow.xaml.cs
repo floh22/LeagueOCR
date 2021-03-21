@@ -29,6 +29,7 @@ using Microsoft.Owin;
 using Microsoft.Win32;
 using OCR;
 using Server;
+using Server.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -446,11 +447,16 @@ namespace LoLOCRHub
 
             var oldDragonIsAlive = HttpServer.dragon.IsAlive;
             var oldBaronIsAlive = HttpServer.baron.IsAlive;
+
+            HttpServer.dragon.TimeSinceTaken += OCRInterval / 1000;
+            HttpServer.baron.TimeSinceTaken += OCRInterval / 1000;
             HttpServer.UpdateNeutralTimers();
             if (!(HttpServer.dragon.Cooldown == 0) && oldDragonIsAlive)
             {
                 HttpServer.oldTypes.Add((DragonType)Enum.Parse(typeof(DragonType), HttpServer.dragon.Type));
                 HttpServer.dragon.TimesTakenInMatch++;
+                HttpServer.dragon.TimeSinceTaken = 0;
+
                 GetTeamInAreaOfInterest(HttpServer.dragon, AOIList.DragonTeam, bitmap);
                 if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
                     doIM = true;
@@ -458,6 +464,7 @@ namespace LoLOCRHub
             if (!(HttpServer.baron.Cooldown == 0) && oldBaronIsAlive)
             {
                 HttpServer.baron.TimesTakenInMatch++;
+                HttpServer.baron.TimeSinceTaken = 0;
                 GetTeamInAreaOfInterest(HttpServer.baron, AOIList.BaronTeam, bitmap);
             }
             HttpServer.UpdateTeams();
@@ -466,12 +473,23 @@ namespace LoLOCRHub
         private void GetTeamInAreaOfInterest(Server.Models.Objective o, AreaOfInterest aoi, Bitmap bmp)
         {
             var outMap = OCR.Utils.ApplyCrop(bmp, aoi.Rect);
-            var task = Task.Run(() => { var found = GetTeamForObjective(o, aoi, outMap, 0); if (found) Console.WriteLine("Found objective killing team"); });
+            var task = Task.Run(() => { 
+                var found = GetTeamForObjective(o, aoi, outMap, 0);
+                if (found)
+                {
+                    Console.WriteLine("Found objective killing team");
+                    o.FoundTeam = true;
+                    var ResetFoundTimer = new System.Timers.Timer(5000);
+                    ResetFoundTimer.AutoReset = false;
+                    ResetFoundTimer.Elapsed += (sender, e) => { o.FoundTeam = false; Console.WriteLine("Resetting Found Team"); };
+                    ResetFoundTimer.Start();
+                }    
+            });
         }
 
         private bool GetTeamForObjective(Server.Models.Objective o, AreaOfInterest aoi, Bitmap regionBitmap, int i)
         {
-            if (i >= 10)
+            if (i >= 20)
             {
                 //Tried too often to determine team! Stop now and let the user manually override
                 o.LastTakenBy = -1;

@@ -24,10 +24,9 @@ namespace LoLOCRHub
 
         public DataManager()
         {
-            this.cacheFolder = new CacheFolder(System.AppDomain.CurrentDomain.BaseDirectory + "cache", "dragon_icons\\", "items\\", "summoners\\");
+            this.cacheFolder = new CacheFolder(System.AppDomain.CurrentDomain.BaseDirectory + "cache", "dragon_icons\\");
 
             CalcDragonHashes();
-            CalcSummonerHashes();
         }
 
         public void CalcDragonHashes()
@@ -51,22 +50,6 @@ namespace LoLOCRHub
             });
 
             Console.WriteLine("Dragon Hashes Created: " + dragonHashes.Count);
-        }
-
-        public void CalcSummonerHashes()
-        {
-            summonerHashes = new Dictionary<SummonerType, byte[]>();
-            var summoners = Directory.GetFiles(cacheFolder.summonerFolder);
-            summoners.ToList().ForEach(summonerPath =>
-            {
-                if (Enum.TryParse(Path.GetFileNameWithoutExtension(summonerPath), out SummonerType iconName))
-                {
-                    using (var bitmap = new Bitmap(summonerPath))
-                    {
-                        summonerHashes.Add(iconName, CreateHashFromBitmap(bitmap));
-                    }
-                }
-            });
         }
 
         private byte[] CreateHashFromBitmap(Bitmap bmp)
@@ -136,15 +119,11 @@ namespace LoLOCRHub
         {
             public string cacheLocation;
             public string dragonFolder;
-            public string itemFolder;
-            public string summonerFolder;
 
-            public CacheFolder(string cacheLocation, string dragonFolder, string itemFolder, string summonerFolder)
+            public CacheFolder(string cacheLocation, string dragonFolder)
             {
                 this.cacheLocation = cacheLocation;
                 this.dragonFolder = Path.Combine(cacheLocation, dragonFolder);
-                this.itemFolder = Path.Combine(cacheLocation, itemFolder);
-                this.summonerFolder = Path.Combine(cacheLocation, summonerFolder);
             }
         }
 
