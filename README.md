@@ -41,7 +41,7 @@
     <br />
     <a href="https://github.com/floh22/LeagueOCR">View Demo</a>
     ·
-    <a href="https://github.com/floh22/LeagueOCR/issues">LeagueOCRrt Bug</a>
+    <a href="https://github.com/floh22/LeagueOCR/issues">Report Bug</a>
     ·
     <a href="https://github.com/floh22/LeagueOCR/issues">Request Feature</a>
   </p>
@@ -52,17 +52,10 @@
 
 OCR Analysis on League of Legends spectator games to augment the official Riot Games API
 
-
-### Built With
-
-* []().Net Framework
-
-
-
 <!-- GETTING STARTED -->
 ## Getting Started
 
-To get a local copy up and running follow these simple steps.
+To get a local copy up and running follow these steps.
 
 ### Prerequisites
 
@@ -70,16 +63,17 @@ To get a local copy up and running follow these simple steps.
 * .NET Framework 4.7.2
 * Windows 10 20H1 (May 2020 Update) Build 19041
 
+### League Settings
+
+* Max UI Scale (100)
+* Both default and eSports timers supported
+* 16:9 Resolution (Native 1080p but higher should work well)
+
 ### Installation
 
-1. Clone the LeagueOCR
-   ```sh
-   git clone https://github.com/floh22/LeagueOCR.git
-   ```
-2. Install TODO
-   ```sh
-   TODO
-   ```
+1. Download [latest release](https://github.com/floh22/LeagueOCR/releases/tag/v0.3.2)
+2. Unzip folder
+3. Run LeagueOCR.exe
 
 
 
@@ -107,14 +101,18 @@ Objectives:
 		"Cooldown":267,
 		"IsAlive":false,
 		"TimesTakenInMatch":3,
-		"LastTakenBy":0
+		"LastTakenBy":0,
+		"FoundTeam":true,
+		"TimeSinceTaken":3
 	},
 	{
 		"Type":"Baron",
 		"Cooldown":219,
 		"IsAlive":false,
 		"TimesTakenInMatch":1,
-		"LastTakenBy":1
+		"LastTakenBy":1,
+		"FoundTeam":false,
+		"TimeSinceTaken":110
 	}]
    ```
 Teams:
