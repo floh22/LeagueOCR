@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Common;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -36,7 +37,7 @@ namespace LoLOCRHub
             icons.ToList().ForEach((iconPath) =>
             {
                 var isESport = false;
-                Console.WriteLine("Generating Hash for " + Path.GetFileNameWithoutExtension(iconPath));
+                var fileName = Path.GetFileNameWithoutExtension(iconPath);
                 string dragonName = "";
                 if (iconPath.EndsWith("Large.png"))
                 {
@@ -54,16 +55,18 @@ namespace LoLOCRHub
                         //Then do the same step to the result as to the image capture, making the result as similar as possible
                         OCR.Utils.ApplyFullOpaque(bitmap);
                         OCR.Utils.ApplyBrightnessColorMask(bitmap);
+                        var hash = CreateColorHash(bitmap);
+                        Logging.Verbose($"{fileName} hash: {hash.ToString()}");
                         if (isESport)
-                            dragonHashesESport.Add(iconName, CreateColorHash(bitmap));
+                            dragonHashesESport.Add(iconName, hash);
                         else
-                            dragonHashes.Add(iconName, CreateColorHash(bitmap));
+                            dragonHashes.Add(iconName, hash);
                     }
                     i++;
                 }
             });
 
-            Console.WriteLine("Dragon Hashes Created: " + i);
+            Logging.Info("Dragon Hashes Created: " + i);
         }
 
         private byte[] CreateHashFromBitmap(Bitmap bmp)
@@ -90,7 +93,7 @@ namespace LoLOCRHub
                 var confidence = 1 - (float)((float)dist / (255 * 3));
                 var res = new DragonTypeResult(pair.Key, dist, confidence);
                 result.Add(res);
-                Console.WriteLine(res.type + ": " + res.distance + ", " + res.confidence);
+                Logging.Verbose(res.type + ": " + res.distance + ", " + res.confidence);
             });
             return result;
         }

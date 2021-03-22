@@ -22,7 +22,10 @@
 //  THE SOFTWARE.
 //  ---------------------------------------------------------------------------------
 
+using Common;
 using Composition.WindowsRuntimeHelpers;
+using System;
+using System.Configuration;
 using System.Windows;
 using Windows.System;
 
@@ -36,8 +39,39 @@ namespace LoLOCRHub
         public App()
         {
             _controller = CoreMessagingHelper.CreateDispatcherQueueControllerForCurrentThread();
+
+            //Create Logger
+            new Logging(GetLogLevel());
         }
 
         private DispatcherQueueController _controller;
+
+        private Logging.LogLevel GetLogLevel()
+        {
+            return (Logging.LogLevel)Enum.Parse(typeof(Logging.LogLevel), ConfigurationManager.AppSettings["LoggingMode"].ToString(), true);
+        }
+
+        public static void AddOrUpdateAppSettings(string key, string value)
+        {
+            try
+            {
+                var configFile = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
+                var settings = configFile.AppSettings.Settings;
+                if (settings[key] == null)
+                {
+                    settings.Add(key, value);
+                }
+                else
+                {
+                    settings[key].Value = value;
+                }
+                configFile.Save(ConfigurationSaveMode.Modified);
+                ConfigurationManager.RefreshSection(configFile.AppSettings.SectionInformation.Name);
+            }
+            catch (ConfigurationErrorsException)
+            {
+                Logging.Warn("Error updating app settings");
+            }
+        }
     }
 }

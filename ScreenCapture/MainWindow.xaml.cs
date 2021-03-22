@@ -29,7 +29,6 @@ using Microsoft.Owin;
 using Microsoft.Win32;
 using OCR;
 using Server;
-using Server.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -102,6 +101,9 @@ namespace LoLOCRHub
         //Not a nice solution but it'll have to do for now
         private Dictionary<ObjectiveRequest, int> currentObjectiveRequests = new Dictionary<ObjectiveRequest, int>();
 
+        //Save last bitmap incase objective detection is slow
+        private Bitmap lastBmp;
+
         private enum PerformanceLevel
         {
             Low = 1,
@@ -139,6 +141,8 @@ namespace LoLOCRHub
                 showPreview = true;
             }
             dataManager = new DataManager();
+
+            LoggingSelection.SelectedIndex = (int)Logging.Instance.Level;
 
             InitComposition(controlsWidth);
             InitCaptureComponent();
@@ -218,7 +222,7 @@ namespace LoLOCRHub
             root.Offset = new Vector3(controlsWidth, 0, 0);
             target.Root = root;
 
-
+            ESportsTimerButton.IsChecked = ConfigurationManager.AppSettings["UseESportsTimers"].ToString().Equals("True", StringComparison.OrdinalIgnoreCase);
         }
 
         //Window Capture Functions
@@ -249,10 +253,10 @@ namespace LoLOCRHub
                 engines.Add(new OCREngine());
             }
 
-            Console.WriteLine("Started " + engines.Count + " OCR Engine Instances");
+            Logging.Info("Started " + engines.Count + " OCR Engine Instances");
 
             OCRFinished += OCRThreadsFinished;
-            sample.BitmapCreatedImmediate += GetTeamForObjectiveLate;
+            sample.BitmapCreatedImmediate += GetTeamInAreaOfInterestLate;
         }
 
         private void StartHwndCapture(IntPtr hwnd, string pName)
@@ -389,7 +393,7 @@ namespace LoLOCRHub
         {
 
             TimeSpan elapsedSpan = new TimeSpan(e.OCRDuration);
-            //Console.WriteLine("OCR in: " + elapsedSpan.TotalMilliseconds + "ms");
+            //Logging.Write("OCR in: " + elapsedSpan.TotalMilliseconds + "ms");
 
             PostOCR(e.bmp, (long)elapsedSpan.TotalMilliseconds);
 
@@ -406,7 +410,7 @@ namespace LoLOCRHub
             OCRThread ocrT = new OCRThread(bitmap, upscalingFactor, new OCRCallback((time) =>
             {
                 TimeSpan elapsedSpan = new TimeSpan(DateTime.Now.Ticks - timeStart);
-                //Console.WriteLine("OCR in: " + elapsedSpan.TotalMilliseconds + "ms");
+                //Logging.Write("OCR in: " + elapsedSpan.TotalMilliseconds + "ms");
                 PostOCR(bitmap, time);
             }));
             Thread OCRThread = new Thread(new ThreadStart(ocrT.StartGoldOCR));
@@ -425,7 +429,7 @@ namespace LoLOCRHub
                 return false;
             }
 
-            Console.WriteLine("Valid Dragon Type: " + content + " (" + result.confidence.ToString("0.000") + ")");
+            Logging.Info("Valid Dragon Type found: " + content + " (" + result.confidence.ToString("0.000") + ")");
             return true;
         }
 
@@ -438,11 +442,13 @@ namespace LoLOCRHub
             {
                 OCRInterval += 1000 * Math.Floor((double)(time / OCRInterval));
                 CustomTimer.Instance.SetInterval((int)OCRInterval);
+                Logging.Warn($"OCR taking too long, slowing down to {OCRInterval}ms");
             }
             else if (OCRInterval > 1000 && (long)OCRInterval > time * 2)
             {
                 OCRInterval = Math.Max(OCRInterval / 2, 1000);
                 CustomTimer.Instance.SetInterval((int)OCRInterval);
+                Logging.Warn($"OCR quick enough to speed up, increasing to {OCRInterval}ms");
             }
 
             var oldDragonIsAlive = HttpServer.dragon.IsAlive;
@@ -451,93 +457,60 @@ namespace LoLOCRHub
             HttpServer.dragon.TimeSinceTaken += OCRInterval / 1000;
             HttpServer.baron.TimeSinceTaken += OCRInterval / 1000;
             HttpServer.UpdateNeutralTimers();
-            if (!(HttpServer.dragon.Cooldown == 0) && oldDragonIsAlive)
+            if (!(HttpServer.dragon.IsAlive) && oldDragonIsAlive)
             {
+                Logging.Info("Drake killed");
                 HttpServer.oldTypes.Add((DragonType)Enum.Parse(typeof(DragonType), HttpServer.dragon.Type));
                 HttpServer.dragon.TimesTakenInMatch++;
                 HttpServer.dragon.TimeSinceTaken = 0;
 
-                GetTeamInAreaOfInterest(HttpServer.dragon, AOIList.DragonTeam, bitmap);
+                GetTeamInAreaOfInterest(HttpServer.dragon, AOIList.DragonTeam, bitmap, lastBmp);
                 if (!DoDragonTypeImageMatching(OCR.Utils.ApplyCrop(bitmap, AOIList.Dragon_Type.Rect), out AOIList.Dragon_Type.CurrentContent))
                     doIM = true;
             }
-            if (!(HttpServer.baron.Cooldown == 0) && oldBaronIsAlive)
+            if (!(HttpServer.baron.IsAlive) && oldBaronIsAlive)
             {
+                Logging.Info("Baron killed");
                 HttpServer.baron.TimesTakenInMatch++;
                 HttpServer.baron.TimeSinceTaken = 0;
-                GetTeamInAreaOfInterest(HttpServer.baron, AOIList.BaronTeam, bitmap);
+                GetTeamInAreaOfInterest(HttpServer.baron, AOIList.BaronTeam, bitmap, lastBmp);
             }
             HttpServer.UpdateTeams();
+            lastBmp = bitmap;
         }
 
-        private void GetTeamInAreaOfInterest(Server.Models.Objective o, AreaOfInterest aoi, Bitmap bmp)
+        private void GetTeamInAreaOfInterest(Server.Models.Objective o, AreaOfInterest aoi, Bitmap bmp, Bitmap pastBmp)
         {
+            var outEarly = OCR.Utils.ApplyCrop(pastBmp, aoi.Rect);
             var outMap = OCR.Utils.ApplyCrop(bmp, aoi.Rect);
-            var task = Task.Run(() => { 
-                var found = GetTeamForObjective(o, aoi, outMap, 0);
+            var task = Task.Run(() => {
+                Logging.Verbose($"Checking for killing team early");
+                var found = GetTeamForObjective(o, aoi, outEarly, -1);
+                if(!found)
+                {
+                    Logging.Verbose("Checking for killing team now");
+                    found = GetTeamForObjective(o, aoi, outMap, 0);
+                } 
                 if (found)
                 {
-                    Console.WriteLine("Found objective killing team");
+                    Logging.Info("Found objective killing team");
                     o.FoundTeam = true;
                     var ResetFoundTimer = new System.Timers.Timer(5000);
                     ResetFoundTimer.AutoReset = false;
-                    ResetFoundTimer.Elapsed += (sender, e) => { o.FoundTeam = false; Console.WriteLine("Resetting Found Team"); };
+                    ResetFoundTimer.Elapsed += (sender, e) => { o.FoundTeam = false; Logging.Info("Resetting Found Team"); };
                     ResetFoundTimer.Start();
-                }    
+                } else
+                {
+                    Logging.Verbose("Killing team could not be found immediately. Trying again every 200ms until found or too late");
+                } 
             });
         }
 
-        private bool GetTeamForObjective(Server.Models.Objective o, AreaOfInterest aoi, Bitmap regionBitmap, int i)
-        {
-            if (i >= 20)
-            {
-                //Tried too often to determine team! Stop now and let the user manually override
-                o.LastTakenBy = -1;
-                o.IsAlive = false;
-                return false;
-            }
-
-            var searchString = o.Type == "Baron" ? "Baron" : "Dragon";
-            var engine = engines.ElementAt(engines.Count - 1);
-            var team = engine.GetTeamInBitmap(regionBitmap);
-
-            if (team.Length != 0 && team.Contains(searchString))
-            {
-                if (team.Contains("Bl") || team.Contains("ue") || team.Contains("Bu"))
-                {
-                    o.LastTakenBy = 0;
-                    o.IsAlive = false;
-                    return true;
-                }
-                else if (team.Contains("Re") || team.Contains("ed") || team.Contains("Rd"))
-                {
-                    o.LastTakenBy = 1;
-                    o.IsAlive = false;
-                    return true;
-                }
-
-                Console.WriteLine("Found Objective but not Team! Considering Objective dead but not setting killer!");
-                o.LastTakenBy = -1;
-                o.IsAlive = false;
-            }
-
-            Thread.Sleep(TimeSpan.FromMilliseconds(200));
-            ScheduleImmediateBitmap(new ObjectiveRequest(aoi, o), ++i);
-            return false;
-        }
-
-        private void ScheduleImmediateBitmap(ObjectiveRequest objectiveRequest, int i)
-        {
-            Console.WriteLine("Could not determine team for objective.");
-            currentObjectiveRequests.Add(objectiveRequest, i);
-            sample.RequestImmediateBitmap();
-        }
-
-        private void GetTeamForObjectiveLate(object sender, Bitmap bmp)
+        private void GetTeamInAreaOfInterestLate(object sender, Bitmap bmp)
         {
             if (currentObjectiveRequests.Count > 2)
             {
-                Console.WriteLine("Something went very wrong! Trying to map more teams to objects than there are objectives!");
+                Logging.Warn("Something went very wrong! Trying to map more teams to objectives than there are objectives!");
             }
             if (currentObjectiveRequests.Count == 0)
                 return;
@@ -554,17 +527,75 @@ namespace LoLOCRHub
                 for (int i = 0; i < currentObjectiveRequests.Count; i++)
                 {
                     var pair = currentObjectiveRequests.ElementAt(i);
-                    Console.WriteLine(pair.Value + " attempts to determine this objective team");
+                    Logging.Verbose(pair.Value + " attempts to determine this objective team");
                     var aoi = pair.Key.aoi;
                     var o = pair.Key.o;
                     currentObjectiveRequests.Remove(pair.Key);
                     var found = GetTeamForObjective(o, aoi, bmps.ElementAt(i), pair.Value);
                     if (found)
-                        Console.WriteLine("Found objective killing team");
+                        Logging.Info("Found objective killing team");
                 }
             });
         }
 
+        private bool GetTeamForObjective(Server.Models.Objective o, AreaOfInterest aoi, Bitmap regionBitmap, int i)
+        {
+            if (i >= 20)
+            {
+                Logging.Warn("Tried too often to determine team!");
+                o.LastTakenBy = -1;
+                o.IsAlive = false;
+                return false;
+            }
+
+            var searchString = o.Type == "Baron" ? "Baron" : "Dragon";
+            var engine = engines.ElementAt(engines.Count - 1);
+            var team = engine.GetTeamInBitmap(regionBitmap);
+
+            List<string> matches = new List<string>();
+            if(o.Type == "Baron")
+            {
+                matches.AddRange(new string[] {"Baron", "Barn", "Baon", "aron", "Bron"});
+            } else
+            {
+                matches.AddRange(new string[] {"Dra", "agon", "Dag", "gon"});
+            }
+
+            if (team.Length != 0 && matches.Any(match => team.Contains(match)))
+            {
+                if (team.Contains("Bl") || team.Contains("ue") || team.Contains("Bu"))
+                {
+                    o.LastTakenBy = 0;
+                    o.IsAlive = false;
+                    return true;
+                }
+                else if (team.Contains("Re") || team.Contains("ed") || team.Contains("Rd"))
+                {
+                    o.LastTakenBy = 1;
+                    o.IsAlive = false;
+                    return true;
+                }
+
+                Logging.Warn("Found Objective but not Team! Considering Objective dead but not setting killer!");
+                o.LastTakenBy = -1;
+                o.IsAlive = false;
+            }
+
+            //Special case -1 for using previous frame. Do not repeat for that
+            if(i != -1)
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(200));
+                ScheduleImmediateBitmap(new ObjectiveRequest(aoi, o), ++i);
+            }
+            return false;
+        }
+
+        private void ScheduleImmediateBitmap(ObjectiveRequest objectiveRequest, int i)
+        {
+            Logging.Warn("Could not determine team for objective.");
+            currentObjectiveRequests.Add(objectiveRequest, i);
+            sample.RequestImmediateBitmap();
+        }
 
         private bool IsValidDragon(DragonTypeResult result)
         {
@@ -619,11 +650,14 @@ namespace LoLOCRHub
         {
             if (sample != null)
                 sample.UpdateESportsTimers();
+            App.AddOrUpdateAppSettings("LoggingMode","True");
         }
 
         private void ESportsTimerButton_Unchecked(object sender, RoutedEventArgs e)
         {
-            sample.UpdateNormalTimers();
+            if(sample != null)
+                sample.UpdateNormalTimers();
+            App.AddOrUpdateAppSettings("LoggingMode", "False");
         }
 
         private void DisableSkip(object sender, RoutedEventArgs e)
@@ -675,6 +709,13 @@ namespace LoLOCRHub
             CustomTimer.Instance.AddDelegate(() => { sample.RequestCurrentBitmap(); });
         }
 
+        private void LoggingLevelChanged(object sender, SelectionChangedEventArgs e)
+        {
+            Logging.LogLevel level = (Logging.LogLevel)Enum.Parse(typeof(Logging.LogLevel), ((ComboBoxItem)LoggingSelection.SelectedItem).Tag.ToString());
+            Logging.SetLogLevel(level);
+            Logging.Write($"Log Level set to {level.ToString()}");
+            App.AddOrUpdateAppSettings("LoggingMode", level.ToString());
+        }
     }
 
     public delegate void OCRCallback(long OCRDuration);

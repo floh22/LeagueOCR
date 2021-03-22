@@ -123,7 +123,7 @@ namespace CaptureSampleCore
                 AOIList.Baron_Timer = new AreaOfInterest(1815, 45, 60, 20, AOIType.ESportsTimer);
             } else
             {
-                AOIList.Dragon_Timer = new AreaOfInterest(1860, 748, 60, 20, AOIType.NormalTimer);
+                AOIList.Dragon_Timer = new AreaOfInterest(1862, 748, 58, 20, AOIType.NormalTimer);
                 AOIList.Dragon_Type = new AreaOfInterest(1837, 746, 25, 25, AOIType.SmallDragonType);
                 AOIList.Baron_Timer = new AreaOfInterest(1770, 748, 60, 20, AOIType.NormalTimer);
             }
@@ -152,7 +152,7 @@ namespace CaptureSampleCore
         {
             if (AOIList.Dragon_Timer == null)
                 return;
-            AOIList.Dragon_Timer.Update(1860, 748, 60, 20, AOIType.NormalTimer);
+            AOIList.Dragon_Timer.Update(1862, 748, 58, 20, AOIType.NormalTimer);
             AOIList.Dragon_Type.Update(1837, 746, 25, 25, AOIType.SmallDragonType);
             AOIList.Baron_Timer.Update(1770, 748, 60, 20, AOIType.NormalTimer);
 

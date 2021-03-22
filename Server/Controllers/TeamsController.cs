@@ -39,15 +39,20 @@ namespace Server.Controllers
             string redGoldText = AOIList.Red_Gold.CurrentContent;
             var blueTeam = HttpServer.blueTeam;
             var redTeam = HttpServer.redTeam;
-            //Console.WriteLine(blueGoldText + ", " + redGoldText);
             if (GoldToInt(blueGoldText, blueTeam.Gold, 0, out int blueGold) && GoldToInt(redGoldText, redTeam.Gold, 1, out int redGold))
             {
+                if (Math.Abs(blueGold - redGold) > 30000)
+                {
+                    Logging.Warn($"Blue and Red gold values too far apart, one value most likely wrong");
+                    return;
+                }
                 blueTeam.Gold = blueGold;
                 redTeam.Gold = redGold;
             } else
             {
-                Console.WriteLine("Couldn't determine both Gold Values. Input Text: " + blueGoldText + ", " + redGoldText);
+                Logging.Warn("Couldn't determine both Gold Values. Input Text: " + blueGoldText + ", " + redGoldText);
             }
+            //Logging.Verbose($"Blue In: {blueGoldText}, Value: {blueTeam.Gold} | Red In: {redGoldText}, Value: {redTeam.Gold}");
         }
 
         private static bool GoldToInt(string goldValue, int backup, int listPos, out int newValue)
@@ -96,6 +101,13 @@ namespace Server.Controllers
                     goldValue = goldValue.Replace(".", "");
                 }
 
+                //Often times OCR will add a 1 to a value like 7.4k to make it 71.4k, try to catch and correct this
+                if (goldValue[1] == 1 && backup < 10000)
+                {
+                    Logging.Verbose($"Remove incorrect 1 before . from {goldValue}");
+                    goldValue = goldValue.Remove(1, 1);
+                }
+
                 if (goldValue.Length == 0)
                     return false;
                 var parse = Int32.Parse(goldValue) * 100;
@@ -119,6 +131,11 @@ namespace Server.Controllers
                         var avg = oldList.Sum() / oldList.Count;
                         if (Math.Abs(parse - avg) > 3000)
                         {
+                            //If the read gold value is far too large, dont even add it to potential values since its obviously wrong
+                            if(parse > 200000)
+                            {
+                                return false;
+                            }
                             oldList.Add(parse);
                             return false;
                         }

@@ -47,12 +47,19 @@
             </Grid.RowDefinitions>
             <StackPanel Margin="10">
                 <ToggleButton x:Name="ShowPreviewButton" Content="Show Preview" Checked="ShowPreviewButton_Checked" Unchecked="ShowPreviewButton_Unchecked" Margin="10" IsChecked="False"/>
-                <ToggleButton x:Name="ESportsTimerButton" Content="Use eSports Timer" Checked="ESportsTimerButton_Checked" Unchecked="ESportsTimerButton_Unchecked" Margin="10" IsChecked="True"/>
+                <ToggleButton x:Name="ESportsTimerButton" Content="Use eSports Timer" Checked="ESportsTimerButton_Checked" Unchecked="ESportsTimerButton_Unchecked" Margin="10"/>
                 <ToggleButton x:Name="IncreaseGoldButton" Content="Allow time skipping" Checked="AllowSkip" Unchecked="DisableSkip" Margin="10" IsChecked="True" />
                 <TextBlock Text="Dragon Count" Margin="10,10,10,-18"/>
                 <xctk:IntegerUpDown x:Name="drakeCount" Value="0" AllowTextInput="false" Margin="10,0,10,-10" ValueChanged="drakeCount_ValueChanged" HorizontalAlignment="Right"/>
                 <TextBlock Text="Baron Count" Margin="10,20,10,-18"/>
-                <xctk:IntegerUpDown x:Name="baronCount" Value="0" AllowTextInput="false" Margin="10,0,10,-10" ValueChanged="baronCount_ValueChanged" HorizontalAlignment="Right"/>
+                <xctk:IntegerUpDown x:Name="baronCount" Value="0" AllowTextInput="false" Margin="10,0,10,10" ValueChanged="baronCount_ValueChanged" HorizontalAlignment="Right"/>
+                <TextBlock Text="Logging Level" Margin="10,0,10,-10"/>
+                <ComboBox Margin="10" SelectionChanged="LoggingLevelChanged" Name="LoggingSelection">
+                    <ComboBoxItem Tag="None">None</ComboBoxItem>
+                    <ComboBoxItem Tag="Warn">Warn</ComboBoxItem>
+                    <ComboBoxItem Tag="Info">Info</ComboBoxItem>
+                    <ComboBoxItem Tag="Verbose">Verbose</ComboBoxItem>
+                </ComboBox>
             </StackPanel>
             <TextBlock Grid.Row="1" Text="Window Scale" Margin="0,-10,0,10" HorizontalAlignment="Center"/>
             <Slider x:Name="ScaleSlider" Grid.Row="2" Minimum="0.2" Maximum="1" TickFrequency="0.1" TickPlacement="BottomRight" ValueChanged="ScaleChanged" Value="0.5" Margin="10"/>

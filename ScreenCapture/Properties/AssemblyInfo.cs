@@ -10,7 +10,7 @@ using System.Windows;
 [assembly: AssemblyTitle("LeagueOCR")]
 [assembly: AssemblyDescription("Data API for League of Legends Spectator Client")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Lars Eble")]
+[assembly: AssemblyCompany("LeagueBroadcastHub")]
 [assembly: AssemblyProduct("LeagueOCR")]
 [assembly: AssemblyCopyright("Copyright © 2021")]
 [assembly: AssemblyTrademark("")]
@@ -51,5 +51,5 @@ using System.Windows;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("0.3.2.0")]
+[assembly: AssemblyVersion("0.4.1.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]

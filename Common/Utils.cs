@@ -36,5 +36,6 @@ namespace Common
             Cleanse,
             Ignite
         }
+
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Common;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,7 +33,7 @@ namespace LoLOCRHub
 
         public void Start()
         {
-            System.Diagnostics.Debug.WriteLine("Starting Timer");
+            Logging.Verbose("Starting Timer");
             running = true;
             _ = Task.Run(() =>
             {
