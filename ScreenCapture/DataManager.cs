@@ -6,9 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 using static Common.Utils;
 using static LoLOCRHub.Utils;
 
@@ -19,6 +16,7 @@ namespace LoLOCRHub
         private CacheFolder cacheFolder;
 
         public Dictionary<DragonType, Color> dragonHashes;
+        public Dictionary<DragonType, Color> dragonHashesESport;
         public Dictionary<string, byte[]> itemHashes;
         public Dictionary<SummonerType, byte[]> summonerHashes;
 
@@ -32,11 +30,23 @@ namespace LoLOCRHub
         public void CalcDragonHashes()
         {
             dragonHashes = new Dictionary<DragonType, Color>();
+            dragonHashesESport = new Dictionary<DragonType, Color>();
             var icons = Directory.GetFiles(cacheFolder.dragonFolder);
+            int i = 0;
             icons.ToList().ForEach((iconPath) =>
             {
+                var isESport = false;
                 Console.WriteLine("Generating Hash for " + Path.GetFileNameWithoutExtension(iconPath));
-                if (Enum.TryParse(Path.GetFileNameWithoutExtension(iconPath), out DragonType iconName))
+                string dragonName = "";
+                if (iconPath.EndsWith("Large.png"))
+                {
+                    isESport = true;
+                    dragonName = Path.GetFileNameWithoutExtension(iconPath).Replace("Large", "");
+                } else
+                {
+                    dragonName = Path.GetFileNameWithoutExtension(iconPath);
+                }
+                if (Enum.TryParse(dragonName, out DragonType iconName))
                 {
                     using (var bitmap = new Bitmap(iconPath))
                     {
@@ -44,12 +54,16 @@ namespace LoLOCRHub
                         //Then do the same step to the result as to the image capture, making the result as similar as possible
                         OCR.Utils.ApplyFullOpaque(bitmap);
                         OCR.Utils.ApplyBrightnessColorMask(bitmap);
-                        dragonHashes.Add(iconName, CreateColorHash(bitmap));
+                        if (isESport)
+                            dragonHashesESport.Add(iconName, CreateColorHash(bitmap));
+                        else
+                            dragonHashes.Add(iconName, CreateColorHash(bitmap));
                     }
+                    i++;
                 }
             });
 
-            Console.WriteLine("Dragon Hashes Created: " + dragonHashes.Count);
+            Console.WriteLine("Dragon Hashes Created: " + i);
         }
 
         private byte[] CreateHashFromBitmap(Bitmap bmp)
@@ -62,14 +76,15 @@ namespace LoLOCRHub
             return OCR.Utils.CalculateAverageColor(bmp);
         }
 
-        public List<DragonTypeResult> GetClosestDragonType(Bitmap bmp)
+        public List<DragonTypeResult> GetClosestDragonType(Bitmap bmp, bool useEsportsTimers)
         {
             //Filter out background
             OCR.Utils.ApplyBrightnessColorMask(bmp);
             //Create hash from input bitmap
             var hash = CreateColorHash(bmp);
             var result = new List<DragonTypeResult>();
-            dragonHashes.ToList().ForEach(pair =>
+            var currentDrakeComparisons = useEsportsTimers ? dragonHashesESport : dragonHashes;
+            currentDrakeComparisons.ToList().ForEach(pair =>
             {
                 var dist = GetDistance(hash, pair.Value); 
                 var confidence = 1 - (float)((float)dist / (255 * 3));
@@ -78,22 +93,6 @@ namespace LoLOCRHub
                 Console.WriteLine(res.type + ": " + res.distance + ", " + res.confidence);
             });
             return result;
-        }
-
-        public SummonerType GetClosestSummonerType(Bitmap bmp, out float confidence)
-        {
-            var hash = CreateHashFromBitmap(bmp);
-
-
-            SummonerType type = SummonerType.Barrier;
-            int smallestDist = Int32.MaxValue;
-            summonerHashes.ToList().ForEach(pair =>
-            {
-                if (GetDistance(hash, pair.Value) < smallestDist)
-                    type = pair.Key;
-            });
-            confidence = hash.Length - smallestDist;
-            return type;
         }
 
         public List<bool> CreateBoolListHash(Bitmap bmp)

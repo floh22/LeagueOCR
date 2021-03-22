@@ -415,7 +415,7 @@ namespace LoLOCRHub
 
         private bool DoDragonTypeImageMatching(Bitmap bmp, out string content)
         {
-            var resultList = dataManager.GetClosestDragonType(bmp).OrderBy(x => x.distance);
+            var resultList = dataManager.GetClosestDragonType(bmp, ESportsTimerButton.IsChecked.Value).OrderBy(x => x.distance);
             var result = resultList.ElementAt(0);
             content = Enum.GetName(typeof(DragonType), result.type);
 
