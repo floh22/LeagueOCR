@@ -54,7 +54,7 @@ namespace Common
         public static void Write(string message)
         {
             Console.WriteLine(message);
-            Instance.Sb.Append(message);
+            Instance.Sb.Append($"[{DateTime.Now:HH-mm-ss}] {message}");
             Instance.Sb.AppendLine();
         }
 
@@ -62,30 +62,24 @@ namespace Common
         {
             if (Instance.Level >= LogLevel.Info)
             {
-                Console.WriteLine(message);
-                Instance.Sb.Append(message);
-                Instance.Sb.AppendLine();
+                Write(message);
             }
-            
+
         }
 
         public static void Warn(string message)
         {
-            if(Instance.Level >= LogLevel.Warn)
+            if (Instance.Level >= LogLevel.Warn)
             {
-                Console.WriteLine($"WARNING: {message}");
-                Instance.Sb.Append($"WARNING: {message}");
-                Instance.Sb.AppendLine();
-            }   
+                Write($"[WARNING] {message}");
+            }
         }
 
         public static void Verbose(string message)
         {
-            if(Instance.Level >= LogLevel.Verbose)
+            if (Instance.Level >= LogLevel.Verbose)
             {
-                Console.WriteLine(message);
-                Instance.Sb.Append(message);
-                Instance.Sb.AppendLine();
+                Write(message);
             }
         }
 

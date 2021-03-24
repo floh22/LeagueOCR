@@ -268,6 +268,8 @@ namespace LoLOCRHub
 
                 if (pName.Equals("League of Legends (TM) Client"))
                 {
+                    Logging.Info("Found League of Legends. Starting OCR and Data Server");
+
                     //Capturing League. Start OCR and Data Server
                     sample.CapturingLeagueOfLegends(ESportsTimerButton.IsChecked.Value);
 
@@ -293,6 +295,7 @@ namespace LoLOCRHub
             if (sample.CapturingLoL)
             {
                 //Was capturing league. Stop OCR and Data Server
+                Logging.Info("Stopping OCR and Data Server");
                 CustomTimer.Instance.Stop();
                 HttpServer.StopServer();
                 sample.CapturingLoL = false;
@@ -650,14 +653,14 @@ namespace LoLOCRHub
         {
             if (sample != null)
                 sample.UpdateESportsTimers();
-            App.AddOrUpdateAppSettings("LoggingMode","True");
+            App.AddOrUpdateAppSettings("UseESportsTimers", "True");
         }
 
         private void ESportsTimerButton_Unchecked(object sender, RoutedEventArgs e)
         {
             if(sample != null)
                 sample.UpdateNormalTimers();
-            App.AddOrUpdateAppSettings("LoggingMode", "False");
+            App.AddOrUpdateAppSettings("UseESportsTimers", "False");
         }
 
         private void DisableSkip(object sender, RoutedEventArgs e)
