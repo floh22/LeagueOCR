@@ -52,7 +52,7 @@ namespace Server.Controllers
             {
                 Logging.Warn("Couldn't determine both Gold Values. Input Text: " + blueGoldText + ", " + redGoldText);
             }
-            //Logging.Verbose($"Blue In: {blueGoldText}, Value: {blueTeam.Gold} | Red In: {redGoldText}, Value: {redTeam.Gold}");
+            Logging.Verbose($"Blue In: {blueGoldText}, Value: {blueTeam.Gold} | Red In: {redGoldText}, Value: {redTeam.Gold}");
         }
 
         private static bool GoldToInt(string goldValue, int backup, int listPos, out int newValue)

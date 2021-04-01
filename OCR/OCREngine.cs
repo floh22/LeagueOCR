@@ -9,6 +9,9 @@ namespace OCR
 
         private TesseractEngine _engine;
 
+        //Used for engine pooling to detect available engines
+        public bool Available = true;
+
         public OCREngine()
         {
             //_engine = new TesseractEngine(@"./tessdata", "eng", EngineMode.Default, @"./tessdata/configs.txt");
@@ -18,6 +21,7 @@ namespace OCR
 
         public string GetTextInSubregion(System.Drawing.Bitmap bitmap, System.Drawing.Rectangle subRegion)
         {
+            Available = false;
             try
             {
                 _engine.DefaultPageSegMode = PageSegMode.SingleLine;
@@ -26,6 +30,7 @@ namespace OCR
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "");
                 page.Dispose();
                 bitmap.Dispose();
+                Available = true;
                 return cleaned;
             }
             catch (Exception e)
@@ -34,12 +39,16 @@ namespace OCR
                 Console.WriteLine("Unexpected Error: " + e.Message);
                 Console.WriteLine("Details: ");
                 Console.WriteLine(e.ToString());
+                Available = true;
                 return "";
             }
+
         }
 
         public string GetGoldInBitmap(System.Drawing.Bitmap bitmap)
         {
+            Available = false;
+
             //Include some letters that look similar to numbers just incase that helps Tesseract pick up some edge cases
             //I'm not actually sure this is always helpful but more often than not Tesseract will output nothing instead of misreading
             _engine.SetVariable("tessedit_char_whitelist", "0Oo1lI2345S678B9.,k");
@@ -53,6 +62,7 @@ namespace OCR
 
                 page.Dispose();
                 bitmap.Dispose();
+                Available = true;
                 return cleaned;
             }
             catch (Exception e)
@@ -61,12 +71,15 @@ namespace OCR
                 Console.WriteLine("Unexpected Error: " + e.Message);
                 Console.WriteLine("Details: ");
                 Console.WriteLine(e.ToString());
+                Available = true;
                 return "";
             }
         }
 
         public string GetTimeInBitmap(System.Drawing.Bitmap bitmap)
         {
+            Available = false;
+
             //Include some letters that look similar to numbers just incase that helps Tesseract pick up some edge cases
             //I'm not actually sure this is always helpful but more often than not Tesseract will output nothing instead of misreading
             _engine.SetVariable("tessedit_char_whitelist", "0Oo1lI2345S678B9:;");
@@ -79,6 +92,7 @@ namespace OCR
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace(" ", "").Replace("O", "0").Replace("o", "0").Replace("I", "1").Replace("l", "1").Replace(";", ":").Replace("S", "5").Replace("B", "8");
                 page.Dispose();
                 bitmap.Dispose();
+                Available = true;
                 return cleaned;
             }
             catch (Exception e)
@@ -87,12 +101,15 @@ namespace OCR
                 Console.WriteLine("Unexpected Error: " + e.Message);
                 Console.WriteLine("Details: ");
                 Console.WriteLine(e.ToString());
+                Available = true;
                 return "";
             }
         }
 
         public string GetTeamInBitmap(System.Drawing.Bitmap bitmap)
         {
+            Available = false;
+
             //Reduced set of letters to hopefully help Tesseract filter some false positives
             _engine.SetVariable("tessedit_char_whitelist", "8BRuedl1IhsiNnmtaDrgo0O! ");
 
@@ -104,6 +121,7 @@ namespace OCR
                 string cleaned = unfilteredOut.Replace("\n", "").Replace("\r", "").Replace("I", "l").Replace("1", "l").Replace("8", "B").Replace("0", "o").Replace("O", "o").Replace("!", "");
                 page.Dispose();
                 bitmap.Dispose();
+                Available = true;
                 return cleaned;
             }
             catch (Exception e)
@@ -112,6 +130,7 @@ namespace OCR
                 Console.WriteLine("Unexpected Error: " + e.Message);
                 Console.WriteLine("Details: ");
                 Console.WriteLine(e.ToString());
+                Available = true;
                 return "";
             }
         }

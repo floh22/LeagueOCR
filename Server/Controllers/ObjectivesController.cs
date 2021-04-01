@@ -44,7 +44,7 @@ namespace Server.Controllers
                 else if (HttpServer.dragon.IsAlive == true)
                     HttpServer.dragon.IsAlive = false;
             }
-            if (TextToTime(AOIList.Baron_Timer.CurrentContent, HttpServer.baron.Cooldown, ref HttpServer.previousBaron, HttpServer.baron.TimesTakenInMatch == 0 ? 1800 : 360, 3, out int baronCd))
+            if (TextToTime(AOIList.Baron_Timer.CurrentContent, HttpServer.baron.Cooldown, ref HttpServer.previousBaron,360, 3, out int baronCd))
             {
                 HttpServer.baron.Cooldown = baronCd;
 
@@ -192,7 +192,7 @@ namespace Server.Controllers
                     else
                     {
                         var oldList = HttpServer.oldValues.ElementAt(listPos);
-                        if (oldList.Count > 3)
+                        if (oldList.Count > 2)
                             oldList.RemoveAt(0);
                         if (oldList.Count != 0)
                         {

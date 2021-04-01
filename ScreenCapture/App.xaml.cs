@@ -24,6 +24,7 @@
 
 using Common;
 using Composition.WindowsRuntimeHelpers;
+using Microsoft.Win32;
 using System;
 using System.Configuration;
 using System.Windows;
@@ -42,6 +43,22 @@ namespace LoLOCRHub
 
             //Create Logger
             new Logging(GetLogLevel());
+            int currentBuild = GetWinBuild();
+            if (currentBuild < 19041)
+            {
+                Logging.Warn($"Windows {currentBuild} installed. Stopping now to prevent confusion");
+                string msg = $"Please update Windows. LeagueOCR requires Windows Build 19041 (20H1) or newer to function. Currently running Build {currentBuild}!";
+                MessageBoxResult result =
+                  MessageBox.Show(
+                    msg,
+                    "LeagueOCR",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                if(result == MessageBoxResult.OK)
+                {
+                    System.Windows.Application.Current.Shutdown();
+                }
+            }
         }
 
         private DispatcherQueueController _controller;
@@ -49,6 +66,15 @@ namespace LoLOCRHub
         private Logging.LogLevel GetLogLevel()
         {
             return (Logging.LogLevel)Enum.Parse(typeof(Logging.LogLevel), ConfigurationManager.AppSettings["LoggingMode"].ToString(), true);
+        }
+
+        private int GetWinBuild()
+        {
+            RegistryKey registryKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+
+            var buildNumber = registryKey.GetValue("CurrentBuildNUmber").ToString();
+            Logging.Info($"Running Windows Build: {buildNumber}");
+            return Int32.Parse(buildNumber);
         }
 
         public static void AddOrUpdateAppSettings(string key, string value)
