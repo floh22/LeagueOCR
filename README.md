@@ -71,7 +71,7 @@ To get a local copy up and running follow these steps.
 
 ### Installation
 
-1. Download [latest release](https://github.com/floh22/LeagueOCR/releases/tag/v0.3.2)
+1. Download [latest release](https://github.com/floh22/LeagueOCR/releases/tag/v0.4.3)
 2. Unzip folder
 3. Run LeagueOCR.exe
 
@@ -130,7 +130,6 @@ Teams:
    ```
 
 If you build a project using this, feel free to let me know!
-
 
 
 <!-- ROADMAP -->
