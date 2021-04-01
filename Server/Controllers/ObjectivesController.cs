@@ -173,9 +173,11 @@ namespace Server.Controllers
 
                     var timeInSeconds = int.Parse(parts[0]) * 60 + seconds;
 
+                    /*
+                     * Unneeded check since timer is relatively accurate and causes more issues than anything else
                     if (timeInSeconds > maxTime)
                         return false;
-
+                    */
                     if (HttpServer.OnlyIncreaseGold)
                     {
                         //Detect Timer reset
